@@ -1,8 +1,3 @@
 {
-  "cleanUrls": true,
-  "functions": {
-    "api/chain.py": {
-      "maxDuration": 15
-    }
-  }
+  "cleanUrls": true
 }

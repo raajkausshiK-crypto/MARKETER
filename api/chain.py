@@ -26,7 +26,6 @@ import os
 import urllib.parse
 import urllib.request
 from collections import Counter
-from http.server import BaseHTTPRequestHandler
 
 UPSTOX_HOST = "https://api.upstox.com"
 STRIKES_EACH_SIDE = 10
@@ -251,28 +250,35 @@ def get_chain(symbol, expiry):
     return build_option_chain(symbol, instrument_key, expiry, expiries)
 
 
-# ------------------------------------------------------------------ handler
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        qs = urllib.parse.urlparse(self.path).query
-        params = urllib.parse.parse_qs(qs)
-        symbol = (params.get("symbol", ["NIFTY"])[0] or "NIFTY").upper().strip()
-        expiry = params.get("expiry", [None])[0] or None
+# ------------------------------------------------------------------ WSGI app
+def app(environ, start_response):
+    """WSGI entrypoint (Vercel auto-detects a module-level `app`)."""
+    qs = environ.get("QUERY_STRING", "")
+    params = urllib.parse.parse_qs(qs)
+    symbol = (params.get("symbol", ["NIFTY"])[0] or "NIFTY").upper().strip()
+    expiry = params.get("expiry", [None])[0] or None
 
-        try:
-            payload = get_chain(symbol, expiry)
-            status = 200
-        except UpstoxError as e:
-            payload = {"type": "error", "message": e.message, "status": e.status}
-            status = 200  # return 200 so the browser can read the message
-        except Exception as e:  # pragma: no cover
-            payload = {"type": "error", "message": f"Server error: {e}"}
-            status = 200
+    try:
+        payload = get_chain(symbol, expiry)
+    except UpstoxError as e:
+        payload = {"type": "error", "message": e.message, "status": e.status}
+    except Exception as e:  # pragma: no cover
+        payload = {"type": "error", "message": f"Server error: {e}"}
 
-        body = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+    body = json.dumps(payload).encode("utf-8")
+    headers = [
+        ("Content-Type", "application/json"),
+        ("Access-Control-Allow-Origin", "*"),
+        ("Cache-Control", "no-store"),
+        ("Content-Length", str(len(body))),
+    ]
+    start_response("200 OK", headers)
+    return [body]
+
+
+# Local test: `python api/chain.py NIFTY`
+if __name__ == "__main__":
+    import sys
+    sym = sys.argv[1] if len(sys.argv) > 1 else "NIFTY"
+    print(json.dumps(get_chain(sym, None), indent=2)[:600])
+
