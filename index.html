@@ -1,547 +1,514 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Options Screener</title>
-    <!-- Tailwind CSS for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <style>
-        /* Custom styles for real-time flash effects */
-        .flash-up {
-            animation: flashGreen 0.5s ease-out;
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Options Screener</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
         }
-        .flash-down {
-            animation: flashRed 0.5s ease-out;
-        }
-        @keyframes flashGreen {
-            0% { background-color: rgba(34, 197, 94, 0.5); }
-            100% { background-color: transparent; }
-        }
-        @keyframes flashRed {
-            0% { background-color: rgba(239, 68, 68, 0.5); }
-            100% { background-color: transparent; }
-        }
-        /* Standard options chain styling */
-        .itm-call { background-color: #f0fdf4; } /* Light green for ITM Calls */
-        .itm-put { background-color: #fef2f2; }  /* Light red for ITM Puts */
-        
-        @media (prefers-color-scheme: dark) {
-            body { background-color: #111827; color: #f9fafb; }
-            .itm-call { background-color: #064e3b; } /* Dark green for ITM Calls */
-            .itm-put { background-color: #7f1d1d; }  /* Dark red for ITM Puts */
-            .border-gray-200 { border-color: #374151; }
-            .bg-white { background-color: #1f2937; }
-            .bg-gray-50 { background-color: #111827; }
-            .text-gray-900 { color: #f3f4f6; }
-            .text-gray-500 { color: #9ca3af; }
-        }
-    </style>
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    @keyframes flashGreen { 0% { background-color: rgba(34,197,94,.35); } 100% { background-color: transparent; } }
+    @keyframes flashRed   { 0% { background-color: rgba(239,68,68,.35); } 100% { background-color: transparent; } }
+    .flash-up   { animation: flashGreen .5s ease-out; }
+    .flash-down { animation: flashRed   .5s ease-out; }
+    @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+    .dot-pulse { animation: pulse-dot 1.4s infinite; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    .fade-in { animation: fadeIn .25s ease-out; }
+    .card-glow:hover { box-shadow: 0 0 0 2px rgba(99,102,241,.5); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  </style>
 </head>
-<body class="p-4 md:p-6 transition-colors duration-200">
+<body class="dark bg-slate-950 text-slate-200 min-h-screen font-sans">
 
-    <div class="max-w-6xl mx-auto">
-        <!-- Header -->
-        <div class="flex flex-col md:flex-row justify-between items-center mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-            <div class="text-center md:text-left mb-4 md:mb-0">
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Real-Time Options Screener</h1>
-                <p class="text-sm text-gray-500 dark:text-gray-400">Monitoring dynamically generated strike prices</p>
-            </div>
-            <div class="flex items-center space-x-4">
-                <div class="text-right">
-                    <div class="text-sm text-gray-500 dark:text-gray-400">Underlying Asset</div>
-                    <div class="text-xl font-bold flex items-center justify-end">
-                        <span id="currentSymbolDisplay" class="tracking-wide">CIPLA</span>
-                        <span id="currentPriceDisplay" class="ml-3 px-3 py-1 rounded bg-gray-100 dark:bg-gray-700 font-mono transition-colors">
-                            1476.80
-                        </span>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-2 mr-2">
-                    <span id="connDot" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                    <span id="connText" class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Offline</span>
-                </div>
-                <button id="toggleSimBtn" onclick="toggleLiveFeed()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow font-medium transition whitespace-nowrap">
-                    Connect to Upstox Bridge
-                </button>
-            </div>
-        </div>
+<div id="app" class="max-w-7xl mx-auto px-4 py-5">
 
-        <!-- Controls -->
-        <div class="mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-            
-            <!-- Search Widget -->
-            <div class="flex flex-col gap-2 w-full md:w-auto">
-                <div class="flex gap-2">
-                    <input type="text" id="stockSearchInput" placeholder="Search (e.g. NIFTY)" class="w-full md:w-56 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase font-medium">
-                    <button onclick="searchStock()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium shadow transition">
-                        Search
-                    </button>
-                    <select id="expirySelect" onchange="changeExpiry()" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">Expiry</option>
-                    </select>
-                </div>
-                <div id="searchMessage" class="text-xs text-green-600 dark:text-green-400 hidden">Stock loaded successfully.</div>
-            </div>
-
-            <!-- Strike Widget -->
-            <div class="flex flex-col gap-2 w-full md:w-auto">
-                <div class="flex gap-2">
-                    <input type="number" id="newStrikeInput" placeholder="Custom strike..." class="w-full md:w-48 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <button onclick="addStrike()" class="bg-gray-800 dark:bg-gray-600 hover:bg-gray-700 dark:hover:bg-gray-500 text-white px-4 py-2 rounded shrink-0 transition shadow">
-                        Add Strike
-                    </button>
-                    <button onclick="resetStrikes()" class="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded px-4 py-2 shrink-0 transition font-medium border border-transparent hover:border-red-200 dark:hover:border-red-800">
-                        Reset
-                    </button>
-                </div>
-                <div id="strikeErrorMsg" class="text-xs text-red-500 hidden">Please enter a valid positive strike price.</div>
-            </div>
-        </div>
-
-        <!-- Options Chain Table -->
-        <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead class="bg-gray-50 dark:bg-gray-900">
-                    <tr>
-                        <th colspan="4" class="py-3 text-center text-sm font-semibold text-green-700 dark:text-green-400 border-b border-gray-200 dark:border-gray-700">CALLS</th>
-                        <th class="py-3 text-center text-sm font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 shadow-inner">STRIKE</th>
-                        <th colspan="4" class="py-3 text-center text-sm font-semibold text-red-700 dark:text-red-400 border-b border-gray-200 dark:border-gray-700">PUTS</th>
-                    </tr>
-                    <tr>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">OI</th>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">IV</th>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-right text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wider">Call LTP</th>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-center text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider bg-gray-100 dark:bg-gray-800 shadow-inner">Strike</th>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-left text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider">Put LTP</th>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">IV</th>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">OI</th>
-                        <th scope="col" class="px-2 md:px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    </tr>
-                </thead>
-                <tbody id="optionsBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    <!-- Rows will be populated by JavaScript -->
-                </tbody>
-            </table>
-        </div>
+  <!-- ===== TOP BAR ===== -->
+  <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-extrabold text-white tracking-tight">Market Screener</h1>
+      <p class="text-xs text-slate-500 mt-0.5">Real-time NSE options chain &middot; monitor multiple stocks</p>
     </div>
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 text-sm">
+        <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+        <span id="statusText" class="text-slate-500 text-xs">Offline</span>
+      </div>
+      <button id="connectBtn" onclick="toggleConnection()"
+        class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow transition">
+        Start Live Data
+      </button>
+    </div>
+  </header>
 
-    <script>
-        // Mock Database for popular stocks to simulate searching
-        const mockMarketData = {
-            'CIPLA': 1476.80,
-            'RELIANCE': 3120.50,
-            'TCS': 3950.00,
-            'HDFCBANK': 1680.20,
-            'INFY': 1520.00,
-            'SBIN': 840.10,
-            'ITC': 430.75,
-            'NIFTY': 24100.00,
-            'BANKNIFTY': 52300.00,
-            'TATAMOTORS': 980.50,
-            'ZOMATO': 210.30
-        };
+  <!-- ===== ADD STOCKS BAR ===== -->
+  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-5">
+    <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+      <div class="flex-1 w-full">
+        <label class="block text-[11px] uppercase tracking-wider text-slate-500 mb-1.5 font-medium">Add Stock / Index</label>
+        <div class="flex gap-2">
+          <input id="searchInput" type="text" placeholder="Type symbol e.g. RELIANCE, NIFTY..."
+            class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm uppercase
+                   focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition placeholder:text-slate-600">
+          <button onclick="addWatchlistItem()"
+            class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow transition whitespace-nowrap">
+            + Add
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Quick-add chips -->
+    <div class="flex flex-wrap gap-2 mt-3">
+      <span class="text-[11px] text-slate-600 uppercase tracking-wider self-center mr-1">Quick add:</span>
+      <button onclick="addWatchlistItem('NIFTY')"     class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">NIFTY</button>
+      <button onclick="addWatchlistItem('BANKNIFTY')"  class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">BANKNIFTY</button>
+      <button onclick="addWatchlistItem('FINNIFTY')"   class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">FINNIFTY</button>
+      <button onclick="addWatchlistItem('RELIANCE')"   class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">RELIANCE</button>
+      <button onclick="addWatchlistItem('TCS')"        class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">TCS</button>
+      <button onclick="addWatchlistItem('INFY')"       class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">INFY</button>
+      <button onclick="addWatchlistItem('HDFCBANK')"   class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">HDFCBANK</button>
+      <button onclick="addWatchlistItem('SBIN')"       class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">SBIN</button>
+      <button onclick="addWatchlistItem('TATAMOTORS')" class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">TATAMOTORS</button>
+      <button onclick="addWatchlistItem('ITC')"        class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">ITC</button>
+      <button onclick="addWatchlistItem('ZOMATO')"     class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">ZOMATO</button>
+      <button onclick="addWatchlistItem('CIPLA')"      class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">CIPLA</button>
+      <button onclick="addWatchlistItem('MIDCPNIFTY')" class="qchip bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium px-3 py-1.5 rounded-full border border-slate-700 hover:border-slate-500 transition cursor-pointer">MIDCPNIFTY</button>
+    </div>
+  </section>
 
-        let currentSymbol = 'NIFTY';
-        let currentPrice = mockMarketData[currentSymbol] || 0;
-        let lastPrice = currentPrice;
+  <div id="toastArea" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
 
-        // Live chain state (populated by the bridge).
-        let chainRows = [];          // [{strike, call:{ltp,oi,iv}, put:{ltp,oi,iv}}]
-        let customStrikes = [];      // user-added strikes (intrinsic-only if not in feed)
-        let currentExpiry = null;
-        let availableExpiries = [];
+  <!-- ===== WATCHLIST CARDS ===== -->
+  <section id="watchlistCards" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-6">
+    <!-- cards injected -->
+  </section>
 
-        let isSimulating = false;
-        let simInterval = null;
+  <!-- ===== SELECTED STOCK DETAIL ===== -->
+  <section id="detailPanel" class="hidden fade-in">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <!-- Detail Header -->
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b border-slate-800">
+        <div class="flex items-center gap-4">
+          <div>
+            <div class="text-[11px] uppercase tracking-wider text-slate-500">Option Chain</div>
+            <div class="flex items-baseline gap-3">
+              <span id="detailSymbol" class="text-2xl font-bold text-white">—</span>
+              <span id="detailSpot" class="text-lg font-semibold text-slate-300 tabular-nums">—</span>
+              <span id="detailChange" class="text-sm font-medium px-2 py-0.5 rounded hidden">—</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <select id="expirySelect" onchange="changeExpiry()"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition">
+            <option value="">Expiry</option>
+          </select>
+          <div class="flex gap-1.5">
+            <input id="customStrikeInput" type="number" placeholder="Strike..."
+              class="w-28 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition">
+            <button onclick="addCustomStrike()"
+              class="bg-slate-700 hover:bg-slate-600 text-sm px-3 py-2 rounded-lg font-medium transition">Add</button>
+            <button onclick="resetCustomStrikes()"
+              class="text-rose-400 hover:bg-rose-500/10 text-sm px-3 py-2 rounded-lg font-medium transition border border-transparent hover:border-rose-500/30">Reset</button>
+          </div>
+        </div>
+      </div>
 
-        // Formats money nicely (2 decimal places)
-        const formatMoney = (val) => Number(val || 0).toFixed(2);
-        const formatOI = (val) => {
-            val = Number(val || 0);
-            if (val >= 1e7) return (val / 1e7).toFixed(2) + 'Cr';
-            if (val >= 1e5) return (val / 1e5).toFixed(2) + 'L';
-            if (val >= 1e3) return (val / 1e3).toFixed(1) + 'K';
-            return String(Math.round(val));
-        };
+      <!-- Chain Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-slate-950/60 text-[11px] uppercase tracking-wider">
+              <th colspan="5" class="py-2.5 text-center text-emerald-400 font-semibold border-b border-slate-800">Calls</th>
+              <th class="py-2.5 text-center text-slate-400 font-semibold border-b border-slate-800 border-x border-slate-700 bg-slate-950/80">Strike</th>
+              <th colspan="5" class="py-2.5 text-center text-rose-400 font-semibold border-b border-slate-800">Puts</th>
+            </tr>
+            <tr class="bg-slate-950/40 text-[10px] uppercase tracking-wider text-slate-600">
+              <th class="py-2 px-2 text-left font-medium">Status</th>
+              <th class="py-2 px-2 text-right font-medium">OI</th>
+              <th class="py-2 px-2 text-right font-medium">IV</th>
+              <th class="py-2 px-2 text-right font-medium">Bid/Ask</th>
+              <th class="py-2 px-2 text-right font-medium text-emerald-500">LTP</th>
+              <th class="py-2 px-2 text-center font-medium border-x border-slate-700 bg-slate-950/80">Price</th>
+              <th class="py-2 px-2 text-left font-medium text-rose-500">LTP</th>
+              <th class="py-2 px-2 text-left font-medium">Bid/Ask</th>
+              <th class="py-2 px-2 text-left font-medium">IV</th>
+              <th class="py-2 px-2 text-left font-medium">OI</th>
+              <th class="py-2 px-2 text-right font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody id="chainBody"></tbody>
+        </table>
+      </div>
 
-        // Populate the expiry dropdown.
-        function renderExpiries() {
-            const sel = document.getElementById('expirySelect');
-            sel.innerHTML = '';
-            if (!availableExpiries.length) {
-                sel.innerHTML = '<option value="">Expiry</option>';
-                return;
-            }
-            availableExpiries.forEach(exp => {
-                const opt = document.createElement('option');
-                opt.value = exp;
-                opt.textContent = exp;
-                if (exp === currentExpiry) opt.selected = true;
-                sel.appendChild(opt);
-            });
-        }
+      <!-- Cash-only / info banner -->
+      <div id="chainInfo" class="hidden px-4 py-2.5 text-xs border-t border-slate-800"></div>
+    </div>
+  </section>
 
-        // Merge live rows with any custom strikes (custom ones get intrinsic-only).
-        function buildDisplayRows() {
-            const byStrike = new Map();
-            chainRows.forEach(r => byStrike.set(Number(r.strike), r));
+  <!-- ===== EMPTY STATE ===== -->
+  <section id="emptyState" class="text-center py-16">
+    <div class="text-slate-700 text-6xl mb-4">&#9881;</div>
+    <p class="text-slate-500 text-sm">Add stocks above to start monitoring</p>
+    <p class="text-slate-600 text-xs mt-1">Click any quick-add chip or type a symbol</p>
+  </section>
+</div>
 
-            customStrikes.forEach(s => {
-                if (!byStrike.has(s)) {
-                    const ci = Math.max(0, currentPrice - s);
-                    const pi = Math.max(0, s - currentPrice);
-                    byStrike.set(s, {
-                        strike: s, custom: true,
-                        call: { ltp: ci, oi: 0, iv: 0 },
-                        put: { ltp: pi, oi: 0, iv: 0 },
-                    });
-                }
-            });
+<script>
+// ========================= STATE =========================
+const IS_REMOTE = !['localhost','127.0.0.1',''].includes(location.hostname);
 
-            return [...byStrike.values()].sort((a, b) => a.strike - b.strike);
-        }
+const watchlist = new Map();   // symbol -> { spot, expiry, expiries, rows, cashOnly, lastSpot, loading, error }
+let selectedSymbol = null;
+let customStrikes = [];
+let pollTimers = {};
+let ws = null;
+let connected = false;
 
-        // Render the live options chain table.
-        function renderTable() {
-            const tbody = document.getElementById('optionsBody');
-            const rows = buildDisplayRows();
+const fmt = v => Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtOI = v => {
+  v = Number(v||0);
+  if (v >= 1e7) return (v/1e7).toFixed(2)+'Cr';
+  if (v >= 1e5) return (v/1e5).toFixed(2)+'L';
+  if (v >= 1e3) return (v/1e3).toFixed(1)+'K';
+  return String(Math.round(v));
+};
 
-            if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500">Connect to the bridge to load the live option chain.</td></tr>';
-                return;
-            }
+// ========================= TOAST =========================
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  const colors = { info:'bg-indigo-600', success:'bg-emerald-600', error:'bg-rose-600', warn:'bg-amber-600' };
+  el.className = `${colors[type]||colors.info} text-white text-sm px-4 py-2.5 rounded-lg shadow-lg fade-in`;
+  el.textContent = msg;
+  document.getElementById('toastArea').appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3000);
+}
 
-            tbody.innerHTML = rows.map(r => {
-                const strike = r.strike;
-                const callITM = currentPrice > strike;   // calls ITM when spot above strike
-                const putITM = strike > currentPrice;    // puts ITM when spot below strike
+// ========================= WATCHLIST MANAGEMENT =========================
+function addWatchlistItem(sym) {
+  sym = (sym || document.getElementById('searchInput').value || '').toUpperCase().trim();
+  document.getElementById('searchInput').value = '';
+  if (!sym) return;
+  if (watchlist.has(sym)) {
+    selectSymbol(sym);
+    return;
+  }
 
-                const callClass = callITM ? 'itm-call' : '';
-                const putClass = putITM ? 'itm-put' : '';
-                const callStatusColor = callITM ? 'text-green-600 dark:text-green-400 font-bold' : 'text-gray-500 dark:text-gray-400';
-                const putStatusColor = putITM ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-500 dark:text-gray-400';
-                const customMark = r.custom ? '<span class="text-blue-500 text-[10px] align-super">*</span>' : '';
+  watchlist.set(sym, { spot:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+  renderCards();
+  selectSymbol(sym);
+  highlightChip(sym);
 
-                return `
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-xs ${callClass}">
-                            <span class="${callStatusColor} px-2 py-1 rounded-md ${callITM ? 'bg-green-100 dark:bg-green-900/40' : ''}">${callITM ? 'ITM' : 'OTM'}</span>
-                        </td>
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-xs text-right font-mono text-gray-500 dark:text-gray-400 ${callClass}">${formatOI(r.call.oi)}</td>
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-xs text-right font-mono text-gray-500 dark:text-gray-400 ${callClass}">${formatMoney(r.call.iv)}</td>
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-sm text-right font-mono font-bold text-green-700 dark:text-green-400 ${callClass}">${formatMoney(r.call.ltp)}</td>
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-sm text-center font-bold font-mono bg-gray-50 dark:bg-gray-900 border-x border-gray-200 dark:border-gray-700">${strike}${customMark}</td>
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-sm text-left font-mono font-bold text-red-700 dark:text-red-400 ${putClass}">${formatMoney(r.put.ltp)}</td>
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-xs text-right font-mono text-gray-500 dark:text-gray-400 ${putClass}">${formatMoney(r.put.iv)}</td>
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-xs text-right font-mono text-gray-500 dark:text-gray-400 ${putClass}">${formatOI(r.put.oi)}</td>
-                        <td class="px-2 md:px-3 py-3 whitespace-nowrap text-xs text-right ${putClass}">
-                            <span class="${putStatusColor} px-2 py-1 rounded-md ${putITM ? 'bg-red-100 dark:bg-red-900/40' : ''}">${putITM ? 'ITM' : 'OTM'}</span>
-                        </td>
-                    </tr>`;
-            }).join('');
-        }
+  if (connected || IS_REMOTE) fetchChain(sym);
+  else toast(`${sym} added — start live data to fetch chain`, 'warn');
+}
 
-        // Update the underlying spot price + flash effect.
-        function updatePrice(newPrice) {
-            lastPrice = currentPrice;
-            currentPrice = newPrice;
+function removeWatchlistItem(sym, e) {
+  e && e.stopPropagation();
+  watchlist.delete(sym);
+  if (pollTimers[sym]) { clearInterval(pollTimers[sym]); delete pollTimers[sym]; }
+  if (selectedSymbol === sym) { selectedSymbol = null; hideDetail(); }
+  renderCards();
+  unhighlightChip(sym);
+  if (!watchlist.size) document.getElementById('emptyState').classList.remove('hidden');
+}
 
-            const display = document.getElementById('currentPriceDisplay');
-            display.textContent = formatMoney(currentPrice);
+function selectSymbol(sym) {
+  selectedSymbol = sym;
+  customStrikes = [];
+  renderCards();
+  renderDetail();
+}
 
-            display.classList.remove('flash-up', 'flash-down');
-            void display.offsetWidth; // force reflow to restart animation
-            if (currentPrice > lastPrice) {
-                display.classList.add('flash-up');
-                display.style.color = '#16a34a';
-            } else if (currentPrice < lastPrice) {
-                display.classList.add('flash-down');
-                display.style.color = '#dc2626';
-            }
-        }
+// ========================= FETCH DATA =========================
+async function fetchChain(sym, expiry) {
+  const entry = watchlist.get(sym);
+  if (!entry) return;
+  entry.loading = true;
+  entry.error = null;
+  renderCards();
 
-        // Apply a full chain snapshot from the bridge.
-        function applyChain(data) {
-            currentSymbol = (data.symbol || currentSymbol).toUpperCase();
-            document.getElementById('currentSymbolDisplay').textContent = currentSymbol;
+  try {
+    const url = `/api/chain?symbol=${encodeURIComponent(sym)}` + (expiry ? `&expiry=${encodeURIComponent(expiry)}` : '');
+    const res = await fetch(url, { cache:'no-store' });
+    const data = await res.json();
 
-            if (Array.isArray(data.expiries)) {
-                availableExpiries = data.expiries;
-                currentExpiry = data.expiry || currentExpiry;
-                renderExpiries();
-            }
+    if (data.type === 'error') {
+      entry.error = data.message || 'API error';
+      entry.loading = false;
+      renderCards();
+      if (selectedSymbol === sym) renderDetail();
+      return;
+    }
+    if (data.type === 'chain') {
+      entry.lastSpot = entry.spot || data.spot;
+      entry.spot = data.spot || 0;
+      entry.expiry = data.expiry || null;
+      entry.expiries = data.expiries || [];
+      entry.rows = data.rows || [];
+      entry.cashOnly = !!data.cash_only;
+      entry.loading = false;
+      entry.error = null;
+      renderCards();
+      if (selectedSymbol === sym) renderDetail();
+    }
+  } catch (e) {
+    entry.error = 'Network error';
+    entry.loading = false;
+    renderCards();
+    if (selectedSymbol === sym) renderDetail();
+  }
+}
 
-            // Cash-only stocks (no F&O): show a note; LTP columns are intrinsic values.
-            const msgBox = document.getElementById('searchMessage');
-            if (data.cash_only) {
-                msgBox.textContent = `${currentSymbol}: no options listed — showing spot + intrinsic values.`;
-                msgBox.className = 'text-xs text-amber-600 dark:text-amber-400 block mt-1';
-            }
+// ========================= POLLING =========================
+function startAllPolling() {
+  watchlist.forEach((_, sym) => startPolling(sym));
+}
+function stopAllPolling() {
+  Object.keys(pollTimers).forEach(sym => { clearInterval(pollTimers[sym]); delete pollTimers[sym]; });
+}
+function startPolling(sym) {
+  if (pollTimers[sym]) return;
+  fetchChain(sym, watchlist.get(sym)?.expiry);
+  pollTimers[sym] = setInterval(() => {
+    const entry = watchlist.get(sym);
+    fetchChain(sym, entry?.expiry);
+  }, 2000);
+}
 
-            chainRows = Array.isArray(data.rows) ? data.rows : [];
-            if (typeof data.spot === 'number') updatePrice(data.spot);
-            renderTable();
-        }
+// ========================= CONNECTION =========================
+function setConnStatus(kind) {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  const btn = document.getElementById('connectBtn');
+  if (kind === 'live') {
+    dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 dot-pulse';
+    text.textContent = 'Live'; text.className = 'text-emerald-400 text-xs';
+    btn.textContent = 'Disconnect'; btn.className = 'bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow transition';
+  } else {
+    dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-600';
+    text.textContent = 'Offline'; text.className = 'text-slate-500 text-xs';
+    btn.textContent = 'Start Live Data'; btn.className = 'bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow transition';
+  }
+}
 
-        // ================= Data source (bridge OR serverless API) =================
-        const WS_URL = 'ws://localhost:8765';
-        // When served from Vercel (or any non-localhost host), poll the HTTPS
-        // serverless function instead of the local WebSocket bridge.
-        const IS_REMOTE = !['localhost', '127.0.0.1', ''].includes(location.hostname);
-        let ws = null;
-        let pollTimer = null;
+function toggleConnection() {
+  if (connected) {
+    connected = false;
+    stopAllPolling();
+    setConnStatus('offline');
+  } else {
+    connected = true;
+    setConnStatus('live');
+    startAllPolling();
+    if (!watchlist.size) toast('Add stocks to start monitoring', 'info');
+  }
+}
 
-        function setConn(kind) {
-            // kind: 'live' | 'connecting' | 'offline' | 'sim'
-            const dot = document.getElementById('connDot');
-            const text = document.getElementById('connText');
-            const btn = document.getElementById('toggleSimBtn');
-            const map = {
-                live:       ['bg-green-500 animate-pulse', 'Live (Upstox)',   'Disconnect'],
-                connecting: ['bg-amber-500 animate-pulse', 'Connecting…',     'Connecting…'],
-                sim:        ['bg-blue-500 animate-pulse',  'Simulated (local)', 'Stop Simulation'],
-                offline:    ['bg-gray-400',                'Offline',          IS_REMOTE ? 'Start Live Data' : 'Connect to Upstox Bridge'],
-            };
-            const [dotCls, label, btnLabel] = map[kind];
-            dot.className = 'w-3 h-3 rounded-full ' + dotCls;
-            text.textContent = label;
-            btn.textContent = btnLabel;
-            if (kind === 'live' || kind === 'sim') {
-                btn.classList.replace('bg-blue-600', 'bg-red-600');
-                btn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
-            } else {
-                btn.classList.replace('bg-red-600', 'bg-blue-600');
-                btn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
-            }
-        }
+// ========================= RENDER: WATCHLIST CARDS =========================
+function renderCards() {
+  const container = document.getElementById('watchlistCards');
+  document.getElementById('emptyState').classList.toggle('hidden', watchlist.size > 0);
 
-        // ---- Remote mode: poll the serverless /api/chain endpoint ----
-        async function pollOnce() {
-            try {
-                const url = `/api/chain?symbol=${encodeURIComponent(currentSymbol)}` +
-                            (currentExpiry ? `&expiry=${encodeURIComponent(currentExpiry)}` : '');
-                const res = await fetch(url, { cache: 'no-store' });
-                const data = await res.json();
-                if (data.type === 'error') {
-                    const msgBox = document.getElementById('searchMessage');
-                    msgBox.textContent = data.message || 'API error';
-                    msgBox.className = 'text-xs text-red-500 block mt-1';
-                    return;
-                }
-                if (data.type === 'chain') applyChain(data);
-            } catch (e) {
-                const msgBox = document.getElementById('searchMessage');
-                msgBox.textContent = 'Cannot reach /api/chain (is UPSTOX_ACCESS_TOKEN set?)';
-                msgBox.className = 'text-xs text-red-500 block mt-1';
-            }
-        }
+  if (!watchlist.size) { container.innerHTML = ''; return; }
 
-        function startPolling() {
-            setConn('live');
-            currentSymbol = currentSymbol || 'NIFTY';
-            pollOnce();
-            pollTimer = setInterval(pollOnce, 1500);
-        }
+  container.innerHTML = [...watchlist.entries()].map(([sym, d]) => {
+    const isSelected = sym === selectedSymbol;
+    const change = d.lastSpot && d.spot ? d.spot - d.lastSpot : 0;
+    const changePct = d.lastSpot ? ((change / d.lastSpot) * 100) : 0;
+    const up = change >= 0;
 
-        function stopPolling() {
-            if (pollTimer) clearInterval(pollTimer);
-            pollTimer = null;
-        }
+    const maxCallOI = d.rows.length ? Math.max(...d.rows.map(r => r.call?.oi || 0)) : 0;
+    const maxPutOI  = d.rows.length ? Math.max(...d.rows.map(r => r.put?.oi || 0)) : 0;
 
-        function stopLocalSim() {
-            if (simInterval) clearInterval(simInterval);
-            simInterval = null;
-            isSimulating = false;
-        }
+    return `
+      <div onclick="selectSymbol('${sym}')"
+        class="relative bg-slate-900 border rounded-xl p-3.5 cursor-pointer transition-all card-glow fade-in
+               ${isSelected ? 'border-indigo-500 ring-1 ring-indigo-500/30' : 'border-slate-800 hover:border-slate-600'}">
+        <button onclick="removeWatchlistItem('${sym}', event)"
+          class="absolute top-2 right-2 text-slate-600 hover:text-rose-400 text-xs transition" title="Remove">&#10005;</button>
+        <div class="text-xs text-slate-500 font-medium uppercase tracking-wider">${d.cashOnly ? 'CASH' : 'F&O'}</div>
+        <div class="text-base font-bold text-white mt-0.5">${sym}</div>
+        ${d.loading ? '<div class="text-xs text-slate-600 mt-1">Loading...</div>' :
+          d.error ? `<div class="text-xs text-rose-400 mt-1 truncate" title="${d.error}">Error</div>` : `
+          <div class="text-lg font-bold tabular-nums mt-1 ${up ? 'text-emerald-400' : 'text-rose-400'}">${fmt(d.spot)}</div>
+          <div class="text-[11px] tabular-nums ${up ? 'text-emerald-500' : 'text-rose-500'}">
+            ${up?'+':''}${fmt(change)} (${up?'+':''}${changePct.toFixed(2)}%)
+          </div>
+          ${d.rows.length ? `
+          <div class="flex gap-2 mt-2 text-[10px] text-slate-500">
+            <span title="Max Call OI">C: ${fmtOI(maxCallOI)}</span>
+            <span title="Max Put OI">P: ${fmtOI(maxPutOI)}</span>
+            <span title="Total strikes">${d.rows.length} stk</span>
+          </div>` : ''}
+        `}
+      </div>`;
+  }).join('');
+}
 
-        // Local fallback simulator (only used if the bridge is unreachable).
-        function startLocalSim() {
-            stopLocalSim();
-            isSimulating = true;
-            setConn('sim');
-            simInterval = setInterval(() => {
-                const vol = currentPrice * 0.0015;
-                const newSpot = currentPrice + (Math.random() * vol * 2 - vol);
-                // simulate synthetic chain rows
-                const base = mockMarketData[currentSymbol] || 1000;
-                const step = base > 10000 ? 100 : base > 1000 ? 50 : 20;
-                const atm = Math.round(newSpot / step) * step;
-                const rows = [];
-                for (let i = -10; i <= 10; i++) {
-                    const k = atm + i * step;
-                    if (k <= 0) continue;
-                    const ci = Math.max(0, newSpot - k);
-                    const pi = Math.max(0, k - newSpot);
-                    const tv = Math.max(1, step * 0.4);
-                    rows.push({
-                        strike: k,
-                        call: { ltp: +(ci + tv * Math.random()).toFixed(2), oi: Math.floor(Math.random() * 5e5), iv: +(10 + Math.random() * 15).toFixed(2) },
-                        put:  { ltp: +(pi + tv * Math.random()).toFixed(2), oi: Math.floor(Math.random() * 5e5), iv: +(10 + Math.random() * 15).toFixed(2) },
-                    });
-                }
-                applyChain({ symbol: currentSymbol, spot: +newSpot.toFixed(2), expiry: 'SIMULATED', expiries: ['SIMULATED'], rows });
-            }, 800);
-        }
+// ========================= RENDER: DETAIL PANEL =========================
+function hideDetail() {
+  document.getElementById('detailPanel').classList.add('hidden');
+}
 
-        function connectBridge() {
-            setConn('connecting');
-            try {
-                ws = new WebSocket(WS_URL);
-            } catch (e) {
-                startLocalSim();
-                return;
-            }
+function renderDetail() {
+  const panel = document.getElementById('detailPanel');
+  if (!selectedSymbol || !watchlist.has(selectedSymbol)) { hideDetail(); return; }
 
-            // If we can't reach the bridge quickly, fall back to local sim.
-            const failTimer = setTimeout(() => {
-                if (ws && ws.readyState !== WebSocket.OPEN) {
-                    try { ws.close(); } catch (_) {}
-                    ws = null;
-                    startLocalSim();
-                }
-            }, 2500);
+  panel.classList.remove('hidden');
+  const d = watchlist.get(selectedSymbol);
+  const spot = d.spot || 0;
 
-            ws.onopen = () => {
-                clearTimeout(failTimer);
-                setConn('live');
-                ws.send(JSON.stringify({ action: 'subscribe', symbol: currentSymbol, expiry: currentExpiry }));
-            };
+  document.getElementById('detailSymbol').textContent = selectedSymbol;
+  const spotEl = document.getElementById('detailSpot');
+  spotEl.textContent = spot ? fmt(spot) : '—';
 
-            ws.onmessage = (ev) => {
-                try {
-                    const data = JSON.parse(ev.data);
-                    if (data.type === 'error') {
-                        const msgBox = document.getElementById('searchMessage');
-                        msgBox.textContent = data.message || 'Bridge error';
-                        msgBox.className = 'text-xs text-red-500 block mt-1';
-                        return;
-                    }
-                    if (data.type === 'chain') {
-                        applyChain(data);
-                    }
-                } catch (_) { /* ignore malformed */ }
-            };
+  // Expiry dropdown
+  const sel = document.getElementById('expirySelect');
+  sel.innerHTML = d.expiries.length
+    ? d.expiries.map(e => `<option value="${e}" ${e===d.expiry?'selected':''}>${e}</option>`).join('')
+    : '<option value="">No expiries</option>';
 
-            ws.onclose = () => {
-                clearTimeout(failTimer);
-                if (!isSimulating) setConn('offline');
-                ws = null;
-            };
-            ws.onerror = () => { /* onclose handles state */ };
-        }
+  // Info banner
+  const info = document.getElementById('chainInfo');
+  if (d.error) {
+    info.textContent = d.error;
+    info.className = 'px-4 py-2.5 text-xs border-t border-slate-800 text-rose-400 bg-rose-500/5 block';
+  } else if (d.cashOnly) {
+    info.textContent = `${selectedSymbol} has no listed options — showing spot price with intrinsic-value grid.`;
+    info.className = 'px-4 py-2.5 text-xs border-t border-slate-800 text-amber-400 bg-amber-500/5 block';
+  } else {
+    info.className = 'hidden';
+  }
 
-        // Button handler: connect/disconnect (bridge locally, polling remotely).
-        function toggleLiveFeed() {
-            if (IS_REMOTE) {
-                if (pollTimer) { stopPolling(); setConn('offline'); }
-                else { startPolling(); }
-                return;
-            }
-            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-                ws.close();
-                ws = null;
-                setConn('offline');
-                return;
-            }
-            if (isSimulating) {
-                stopLocalSim();
-                setConn('offline');
-                return;
-            }
-            connectBridge();
-        }
+  renderChainTable(d, spot);
+}
 
-        // Search for a new underlying.
-        function searchStock() {
-            const input = document.getElementById('stockSearchInput').value.toUpperCase().trim();
-            const msgBox = document.getElementById('searchMessage');
-            if (!input) return;
+function renderChainTable(d, spot) {
+  const body = document.getElementById('chainBody');
 
-            currentSymbol = input;
-            currentExpiry = null;          // let the bridge pick nearest expiry
-            customStrikes = [];
-            chainRows = [];
-            document.getElementById('currentSymbolDisplay').textContent = currentSymbol;
+  // Merge custom strikes
+  const byStrike = new Map();
+  (d.rows || []).forEach(r => byStrike.set(Number(r.strike), r));
+  customStrikes.forEach(s => {
+    if (!byStrike.has(s)) {
+      byStrike.set(s, {
+        strike: s, custom: true,
+        call: { ltp: Math.max(0, spot-s), oi:0, iv:0, bid:0, ask:0 },
+        put:  { ltp: Math.max(0, s-spot), oi:0, iv:0, bid:0, ask:0 },
+      });
+    }
+  });
 
-            const isLive = ws && ws.readyState === WebSocket.OPEN;
-            if (IS_REMOTE) {
-                // Remote: next poll picks up the new symbol immediately.
-                msgBox.textContent = `Loading live chain for ${currentSymbol}…`;
-                msgBox.className = 'text-xs text-green-600 dark:text-green-400 block mt-1';
-                if (pollTimer) pollOnce(); else startPolling();
-            } else if (isLive) {
-                ws.send(JSON.stringify({ action: 'subscribe', symbol: currentSymbol, expiry: null }));
-                msgBox.textContent = `Loading live chain for ${currentSymbol}…`;
-                msgBox.className = 'text-xs text-green-600 dark:text-green-400 block mt-1';
-            } else {
-                currentPrice = mockMarketData[currentSymbol] || (Math.floor(Math.random() * 4900) + 100);
-                lastPrice = currentPrice;
-                document.getElementById('currentPriceDisplay').textContent = formatMoney(currentPrice);
-                renderTable();
-                msgBox.textContent = `Not connected — showing placeholder for ${currentSymbol}`;
-                msgBox.className = 'text-xs text-blue-600 dark:text-blue-400 block mt-1';
-            }
+  const rows = [...byStrike.values()].sort((a,b) => a.strike - b.strike);
 
-            document.getElementById('stockSearchInput').value = '';
-            setTimeout(() => { msgBox.classList.add('hidden'); }, 4000);
-        }
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="11" class="py-10 text-center text-slate-600 text-sm">
+      ${d.loading ? 'Loading option chain...' : d.error ? d.error : 'No data available. Start live data to fetch.'}</td></tr>`;
+    return;
+  }
 
-        // Change expiry from the dropdown.
-        function changeExpiry() {
-            const exp = document.getElementById('expirySelect').value;
-            if (!exp) return;
-            currentExpiry = exp;
-            if (IS_REMOTE && pollTimer) {
-                pollOnce();
-            } else if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: 'subscribe', symbol: currentSymbol, expiry: exp }));
-            }
-        }
+  body.innerHTML = rows.map(r => {
+    const strike = r.strike;
+    const c = r.call || {};
+    const p = r.put || {};
+    const callITM = spot > strike;
+    const putITM = strike > spot;
+    const isATM = rows.length > 1 && Math.abs(strike - spot) === Math.min(...rows.map(x => Math.abs(x.strike - spot)));
+    const isCustom = r.custom;
 
-        // Allow pressing Enter key in search box
-        document.getElementById('stockSearchInput').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') searchStock();
-        });
+    const callBg = callITM ? 'bg-emerald-950/30' : '';
+    const putBg  = putITM  ? 'bg-rose-950/30'    : '';
+    const atmBorder = isATM ? 'border-y-2 border-indigo-500/40' : 'border-b border-slate-800/60';
 
-        // Add user-defined strike manually (shown with intrinsic values).
-        function addStrike() {
-            const input = document.getElementById('newStrikeInput');
-            const errorMsg = document.getElementById('strikeErrorMsg');
-            const val = parseFloat(input.value);
+    const badge = (itm, col) => `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+      itm ? `bg-${col}-500/20 text-${col}-300` : 'bg-slate-800 text-slate-600'}">${itm?'ITM':'OTM'}</span>`;
 
-            if (!isNaN(val) && val > 0) {
-                if (!customStrikes.includes(val)) {
-                    customStrikes.push(val);
-                    renderTable();
-                }
-                input.value = '';
-                errorMsg.classList.add('hidden');
-            } else {
-                errorMsg.classList.remove('hidden');
-            }
-        }
+    return `<tr class="${atmBorder} hover:bg-slate-800/40 transition-colors">
+      <td class="py-2 px-2 ${callBg}">${badge(callITM,'emerald')}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} ${callITM?'text-slate-400':'text-slate-600'}">${fmtOI(c.oi)}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-600">${Number(c.iv||0).toFixed(1)}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-600">${fmt(c.bid||0)}/${fmt(c.ask||0)}</td>
+      <td class="py-2 px-2 text-right tabular-nums font-semibold ${callBg} ${callITM?'text-emerald-400':'text-slate-400'}">${fmt(c.ltp)}</td>
+      <td class="py-2 px-2 text-center font-bold tabular-nums bg-slate-950/60 border-x border-slate-700/50 ${isATM?'text-indigo-400':'text-slate-300'}">
+        ${strike}${isCustom?'<span class="text-indigo-400 text-[9px] align-super ml-0.5">+</span>':''}${isATM?'<span class="text-[9px] text-indigo-500 block leading-none">ATM</span>':''}
+      </td>
+      <td class="py-2 px-2 text-left tabular-nums font-semibold ${putBg} ${putITM?'text-rose-400':'text-slate-400'}">${fmt(p.ltp)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-600">${fmt(p.bid||0)}/${fmt(p.ask||0)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-600">${Number(p.iv||0).toFixed(1)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} ${putITM?'text-slate-400':'text-slate-600'}">${fmtOI(p.oi)}</td>
+      <td class="py-2 px-2 text-right ${putBg}">${badge(putITM,'rose')}</td>
+    </tr>`;
+  }).join('');
+}
 
-        // Allow pressing Enter key in strike box
-        document.getElementById('newStrikeInput').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') addStrike();
-        });
+// ========================= EXPIRY / CUSTOM STRIKES =========================
+function changeExpiry() {
+  const exp = document.getElementById('expirySelect').value;
+  if (!exp || !selectedSymbol) return;
+  const entry = watchlist.get(selectedSymbol);
+  if (entry) entry.expiry = exp;
+  if (connected || IS_REMOTE) fetchChain(selectedSymbol, exp);
+}
 
-        // Reset custom strikes back to the live chain only.
-        function resetStrikes() {
-            customStrikes = [];
-            renderTable();
-            document.getElementById('strikeErrorMsg').classList.add('hidden');
-        }
+function addCustomStrike() {
+  const input = document.getElementById('customStrikeInput');
+  const val = parseFloat(input.value);
+  if (!isNaN(val) && val > 0 && !customStrikes.includes(val)) {
+    customStrikes.push(val);
+    renderDetail();
+  }
+  input.value = '';
+}
+document.getElementById('customStrikeInput')?.addEventListener('keydown', e => { if (e.key==='Enter') addCustomStrike(); });
 
-        // Initial Render on page load
-        renderTable();
-        setConn('offline');
-        // On a deployed (remote) host, start live polling automatically.
-        if (IS_REMOTE) startPolling();
+function resetCustomStrikes() {
+  customStrikes = [];
+  renderDetail();
+}
 
-    </script>
+// ========================= CHIP HIGHLIGHTING =========================
+function highlightChip(sym) {
+  document.querySelectorAll('.qchip').forEach(btn => {
+    if (btn.textContent.trim() === sym) {
+      btn.classList.remove('bg-slate-800','text-slate-400','border-slate-700');
+      btn.classList.add('bg-indigo-600/20','border-indigo-500/50','text-indigo-400');
+    }
+  });
+}
+function unhighlightChip(sym) {
+  document.querySelectorAll('.qchip').forEach(btn => {
+    if (btn.textContent.trim() === sym) {
+      btn.classList.remove('bg-indigo-600/20','border-indigo-500/50','text-indigo-400');
+      btn.classList.add('bg-slate-800','text-slate-400','border-slate-700');
+    }
+  });
+}
+
+// ========================= SEARCH INPUT =========================
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addWatchlistItem();
+});
+
+// ========================= INIT =========================
+renderCards();
+if (IS_REMOTE) {
+  connected = true;
+  setConnStatus('live');
+}
+</script>
 </body>
 </html>
