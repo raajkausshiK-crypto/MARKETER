@@ -48,9 +48,15 @@ class UpstoxError(Exception):
 
 
 def _token():
-    tok = os.environ.get("UPSTOX_ACCESS_TOKEN", "").strip()
+    tok = os.environ.get("UPSTOX_ACCESS_TOKEN", "").strip().strip('"').strip("'")
     if not tok:
-        raise UpstoxError(500, "UPSTOX_ACCESS_TOKEN is not set in the environment.")
+        on_vercel = "yes" if os.environ.get("VERCEL") else "no"
+        raise UpstoxError(
+            500,
+            "UPSTOX_ACCESS_TOKEN is not set for this deployment. "
+            f"(on_vercel={on_vercel}) Add it in Vercel > Settings > "
+            "Environment Variables for the Production environment, then REDEPLOY.",
+        )
     return tok
 
 
