@@ -38,7 +38,7 @@ STRIKES_EACH_SIDE = 20
 # rapid 2s polling (and the same symbol requested by several panes/tabs) into
 # far fewer Upstox calls, which is what avoids hitting Upstox rate limits.
 _CACHE = {}
-_CACHE_TTL = 5.0        # seconds a cached chain is considered fresh
+_CACHE_TTL = 8.0        # seconds a cached chain is considered fresh
 _CACHE_MAX = 200        # guard against unbounded growth
 
 # Last known-good chain per symbol, served if a refresh fails/returns empty.
