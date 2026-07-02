@@ -149,6 +149,9 @@
         </div>
       </div>
 
+      <!-- Analytics strip (PCR / Max Pain / S-R / OI / straddle) -->
+      <div id="detailAnalytics" class="hidden"></div>
+
       <!-- Chain Table -->
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -220,6 +223,77 @@ const fmtOI = v => {
   if (v >= 1e3) return (v/1e3).toFixed(1)+'K';
   return String(Math.round(v));
 };
+
+// ========================= ANALYTICS =========================
+// Derived option-chain metrics. Computed over the strikes we have (a window
+// around ATM), so max-pain/OI totals reflect the visible chain range.
+function computeAnalytics(d) {
+  const rows = d.rows || [];
+  const spot = d.spot || 0;
+  if (!rows.length) return null;
+
+  let totCall = 0, totPut = 0, resistance = null, support = null, maxCallOI = -1, maxPutOI = -1;
+  rows.forEach(r => {
+    const coi = r.call?.oi || 0, poi = r.put?.oi || 0;
+    totCall += coi; totPut += poi;
+    if (coi > maxCallOI) { maxCallOI = coi; resistance = r.strike; }  // most Call OI = resistance
+    if (poi > maxPutOI) { maxPutOI = poi; support = r.strike; }        // most Put OI = support
+  });
+  const pcr = totCall ? totPut / totCall : 0;
+
+  // Max pain: settlement strike that minimizes total intrinsic payout to
+  // option holders (i.e. least loss to writers).
+  let maxPain = null, minLoss = Infinity;
+  rows.forEach(exp => {
+    const K = exp.strike;
+    let loss = 0;
+    rows.forEach(r => {
+      loss += (r.call?.oi || 0) * Math.max(0, K - r.strike);
+      loss += (r.put?.oi || 0) * Math.max(0, r.strike - K);
+    });
+    if (loss < minLoss) { minLoss = loss; maxPain = K; }
+  });
+
+  // ATM straddle premium (Call LTP + Put LTP at the strike nearest spot).
+  let atmR = rows[0], best = Infinity;
+  rows.forEach(r => { const df = Math.abs(r.strike - spot); if (df < best) { best = df; atmR = r; } });
+  const straddle = (atmR.call?.ltp || 0) + (atmR.put?.ltp || 0);
+
+  return { totCall, totPut, pcr, maxPain, support, resistance, straddle, atmStrike: atmR.strike };
+}
+
+function analyticsStripHTML(a) {
+  if (!a) return '';
+  const chip = (label, val, sub, color) =>
+    `<div class="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/40 min-w-[76px]">
+       <div class="text-[9px] uppercase tracking-wider text-slate-500">${label}</div>
+       <div class="text-sm font-bold tabular-nums ${color || 'text-slate-200'}">${val}</div>
+       ${sub ? `<div class="text-[9px] text-slate-500">${sub}</div>` : ''}
+     </div>`;
+  const pcrColor = a.pcr >= 1 ? 'text-emerald-400' : 'text-rose-400';
+  return `<div class="flex flex-wrap gap-2 p-3 border-b border-slate-800 bg-slate-950/30">
+    ${chip('PCR', a.pcr.toFixed(2), a.pcr >= 1 ? 'put-heavy' : 'call-heavy', pcrColor)}
+    ${chip('Max Pain', a.maxPain, 'expiry magnet', 'text-indigo-400')}
+    ${chip('Support', a.support, 'max Put OI', 'text-emerald-400')}
+    ${chip('Resistance', a.resistance, 'max Call OI', 'text-rose-400')}
+    ${chip('Call OI', fmtOI(a.totCall), 'total', 'text-slate-300')}
+    ${chip('Put OI', fmtOI(a.totPut), 'total', 'text-slate-300')}
+    ${chip('ATM Straddle', fmt(a.straddle), '@' + a.atmStrike, 'text-amber-400')}
+  </div>`;
+}
+
+// Compact single-line analytics for a quad pane.
+function analyticsLineHTML(a) {
+  if (!a) return '';
+  const pcrColor = a.pcr >= 1 ? 'text-emerald-400' : 'text-rose-400';
+  return `<div class="flex items-center flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-1.5 border-b border-slate-800 text-[10px] bg-slate-950/30">
+    <span class="text-slate-500">PCR <b class="${pcrColor}">${a.pcr.toFixed(2)}</b></span>
+    <span class="text-slate-500">MaxPain <b class="text-indigo-400">${a.maxPain}</b></span>
+    <span class="text-slate-500">S <b class="text-emerald-400">${a.support}</b></span>
+    <span class="text-slate-500">R <b class="text-rose-400">${a.resistance}</b></span>
+    <span class="text-slate-500">Strad <b class="text-amber-400">${fmt(a.straddle)}</b></span>
+  </div>`;
+}
 
 // ========================= TOAST =========================
 function toast(msg, type='info') {
@@ -553,6 +627,7 @@ function buildQuadPane(i) {
        </div>
        <span data-role="exp" class="text-[10px] text-slate-500 whitespace-nowrap"></span>
      </div>
+     <div data-role="stats"></div>
      <div data-role="chart" class="overflow-y-auto" style="max-height:340px;"></div>`;
 
   pane.querySelector('[data-role="pick"]').onchange = (e) => {
@@ -569,11 +644,13 @@ function updateQuadPane(i) {
   const sym = quadSlots[i];
   const spotEl = pane.querySelector('[data-role="spot"]');
   const expEl = pane.querySelector('[data-role="exp"]');
+  const statsEl = pane.querySelector('[data-role="stats"]');
   const chart = pane.querySelector('[data-role="chart"]');
 
   if (!sym || !watchlist.has(sym)) {
     spotEl.textContent = '';
     expEl.textContent = '';
+    statsEl.innerHTML = '';
     chart.innerHTML = '<div class="py-12 text-center text-slate-600 text-xs">Pick a stock to show its chain</div>';
     return;
   }
@@ -583,6 +660,7 @@ function updateQuadPane(i) {
   spotEl.className = 'text-sm font-bold tabular-nums truncate ' +
     ((d.lastSpot && d.spot && d.spot < d.lastSpot) ? 'text-rose-400' : 'text-emerald-400');
   expEl.textContent = d.expiry || '';
+  statsEl.innerHTML = analyticsLineHTML(computeAnalytics(d));
   chart.innerHTML = quadChainTable(d);
 }
 
@@ -655,6 +733,17 @@ function renderDetail() {
   sel.innerHTML = d.expiries.length
     ? d.expiries.map(e => `<option value="${e}" ${e===d.expiry?'selected':''}>${e}</option>`).join('')
     : '<option value="">No expiries</option>';
+
+  // Analytics strip (hidden for cash-only stocks, which have no real OI/IV).
+  const analyticsEl = document.getElementById('detailAnalytics');
+  const a = d.cashOnly ? null : computeAnalytics(d);
+  if (a) {
+    analyticsEl.innerHTML = analyticsStripHTML(a);
+    analyticsEl.classList.remove('hidden');
+  } else {
+    analyticsEl.innerHTML = '';
+    analyticsEl.classList.add('hidden');
+  }
 
   // Info banner
   const info = document.getElementById('chainInfo');
