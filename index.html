@@ -248,9 +248,12 @@ function selectSymbol(sym) {
 async function fetchChain(sym, expiry) {
   const entry = watchlist.get(sym);
   if (!entry) return;
-  entry.loading = true;
-  entry.error = null;
-  renderCards();
+
+  // Only show the "Loading…" placeholder before we have ANY data. On every
+  // subsequent poll we refresh silently and keep the current data on screen,
+  // so the card updates in place instead of blinking Loading each cycle.
+  const firstLoad = !entry.rows.length;
+  if (firstLoad) { entry.loading = true; entry.error = null; renderCards(); }
 
   try {
     const url = `${API_BASE}/api/chain?symbol=${encodeURIComponent(sym)}` + (expiry ? `&expiry=${encodeURIComponent(expiry)}` : '');
@@ -258,6 +261,7 @@ async function fetchChain(sym, expiry) {
     const data = await res.json();
 
     if (data.type === 'error') {
+      // API-level error (e.g. token expired) — always surface it.
       entry.error = data.message || 'API error';
       entry.loading = false;
       renderCards();
@@ -277,12 +281,16 @@ async function fetchChain(sym, expiry) {
       if (selectedSymbol === sym) renderDetail();
     }
   } catch (e) {
-    entry.error = IS_REMOTE
-      ? 'Cannot reach /api/chain — is UPSTOX_ACCESS_TOKEN set?'
-      : `Cannot reach live API (${PROD_API})`;
-    entry.loading = false;
-    renderCards();
-    if (selectedSymbol === sym) renderDetail();
+    // Network hiccup on a refresh: keep the last good data instead of wiping
+    // the card. Only show an error if we never managed to load anything.
+    if (firstLoad) {
+      entry.error = IS_REMOTE
+        ? 'Cannot reach /api/chain — is UPSTOX_ACCESS_TOKEN set?'
+        : `Cannot reach live API (${PROD_API})`;
+      entry.loading = false;
+      renderCards();
+      if (selectedSymbol === sym) renderDetail();
+    }
   }
 }
 
