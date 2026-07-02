@@ -175,6 +175,13 @@
 // ========================= STATE =========================
 const IS_REMOTE = !['localhost','127.0.0.1',''].includes(location.hostname);
 
+// The live data function (/api/chain) only exists on the Vercel deployment.
+// When the page is opened locally (static preview, no backend), fall back to
+// the deployed API — it sends `Access-Control-Allow-Origin: *`, so the
+// cross-origin request works. Change PROD_API if you rename the deployment.
+const PROD_API = 'https://market-options-screener.vercel.app';
+const API_BASE = IS_REMOTE ? '' : PROD_API;
+
 const watchlist = new Map();   // symbol -> { spot, expiry, expiries, rows, cashOnly, lastSpot, loading, error }
 let selectedSymbol = null;
 let customStrikes = [];
@@ -246,7 +253,7 @@ async function fetchChain(sym, expiry) {
   renderCards();
 
   try {
-    const url = `/api/chain?symbol=${encodeURIComponent(sym)}` + (expiry ? `&expiry=${encodeURIComponent(expiry)}` : '');
+    const url = `${API_BASE}/api/chain?symbol=${encodeURIComponent(sym)}` + (expiry ? `&expiry=${encodeURIComponent(expiry)}` : '');
     const res = await fetch(url, { cache:'no-store' });
     const data = await res.json();
 
@@ -270,7 +277,9 @@ async function fetchChain(sym, expiry) {
       if (selectedSymbol === sym) renderDetail();
     }
   } catch (e) {
-    entry.error = 'Network error';
+    entry.error = IS_REMOTE
+      ? 'Cannot reach /api/chain — is UPSTOX_ACCESS_TOKEN set?'
+      : `Cannot reach live API (${PROD_API})`;
     entry.loading = false;
     renderCards();
     if (selectedSymbol === sym) renderDetail();
@@ -539,14 +548,11 @@ document.getElementById('searchInput').addEventListener('keydown', e => {
 
 // ========================= INIT =========================
 renderCards();
-if (IS_REMOTE) {
-  // Deployed: auto-connect and begin polling any watched symbols immediately.
-  connected = true;
-  setConnStatus('live');
-  startAllPolling();
-} else {
-  setConnStatus('offline');
-}
+// A live API is always reachable now (relative when deployed, PROD_API when
+// running locally), so auto-connect and begin polling any watched symbols.
+connected = true;
+setConnStatus('live');
+startAllPolling();
 </script>
 </body>
 </html>
