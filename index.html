@@ -172,16 +172,16 @@
       <!-- Analytics strip (PCR / Max Pain / S-R / OI / straddle) -->
       <div id="detailAnalytics" class="hidden"></div>
 
-      <!-- Chain Table -->
-      <div class="overflow-x-auto">
+      <!-- Chain Table (internally scrollable so the full chain stays usable) -->
+      <div id="chainScroll" class="overflow-auto" style="max-height:70vh;">
         <table class="w-full text-sm">
-          <thead>
-            <tr class="bg-slate-950/60 text-[11px] uppercase tracking-wider">
+          <thead class="sticky top-0 z-10">
+            <tr class="bg-slate-950/90 backdrop-blur text-[11px] uppercase tracking-wider">
               <th colspan="5" class="py-2.5 text-center text-emerald-400 font-semibold border-b border-slate-800">Calls</th>
               <th class="py-2.5 text-center text-slate-400 font-semibold border-b border-slate-800 border-x border-slate-700 bg-slate-950/80">Strike</th>
               <th colspan="5" class="py-2.5 text-center text-rose-400 font-semibold border-b border-slate-800">Puts</th>
             </tr>
-            <tr class="bg-slate-950/40 text-[10px] uppercase tracking-wider text-slate-600">
+            <tr class="bg-slate-950 text-[10px] uppercase tracking-wider text-slate-600">
               <th class="py-2 px-2 text-left font-medium">Status</th>
               <th class="py-2 px-2 text-right font-medium">OI</th>
               <th class="py-2 px-2 text-right font-medium">IV</th>
@@ -236,6 +236,7 @@ let quadSlots = [null, null, null, null];   // which symbol each of the 4 panes 
 let quadMembershipSig = '';                  // to know when to rebuild the pane shells
 let screenerSort = { key: 'symbol', dir: 1 };
 let screenerMembershipSig = '';
+let detailCurSym = null;                      // last symbol the detail table centered on
 
 const fmt = v => Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtOI = v => {
@@ -856,13 +857,12 @@ function updateQuadPane(i) {
   const prevScroll = chart.scrollTop;
   chart.innerHTML = quadChainTable(d);
   if (prevSym !== sym) {
-    pane.dataset.cursym = sym;
     // Center the ATM row within the chart's own scroll box (not the page).
-    // Deferred to the next frame so the freshly-rendered rows are laid out
-    // and getBoundingClientRect returns real positions.
+    // Deferred to the next frame so the freshly-rendered rows are laid out.
     requestAnimationFrame(() => {
       const atmRow = chart.querySelector('[data-atm="1"]');
-      if (!atmRow) return;
+      if (!atmRow) return;                 // data not in yet — retry on next render
+      pane.dataset.cursym = sym;           // mark centered only once we actually did it
       const cRect = chart.getBoundingClientRect();
       const rRect = atmRow.getBoundingClientRect();
       chart.scrollTop += (rRect.top - cRect.top) - (chart.clientHeight - rRect.height) / 2;
@@ -922,6 +922,7 @@ function quadChainTable(d) {
 // ========================= RENDER: DETAIL PANEL =========================
 function hideDetail() {
   document.getElementById('detailPanel').classList.add('hidden');
+  detailCurSym = null;   // re-center ATM next time a chain is shown
 }
 
 function renderDetail() {
@@ -965,7 +966,23 @@ function renderDetail() {
     info.className = 'hidden';
   }
 
+  // Rebuild the chain, then center the ATM row the first time this symbol is
+  // shown (full chains are long) and preserve the user's scroll on updates.
+  const scroll = document.getElementById('chainScroll');
+  const prevScroll = scroll.scrollTop;
   renderChainTable(d, spot);
+  if (detailCurSym !== selectedSymbol) {
+    requestAnimationFrame(() => {
+      const atmRow = document.querySelector('#chainBody tr[data-atm="1"]');
+      if (!atmRow) return;                 // data not in yet — retry on next render
+      detailCurSym = selectedSymbol;       // mark centered only once we actually did it
+      const cRect = scroll.getBoundingClientRect();
+      const rRect = atmRow.getBoundingClientRect();
+      scroll.scrollTop += (rRect.top - cRect.top) - (scroll.clientHeight - rRect.height) / 2;
+    });
+  } else {
+    scroll.scrollTop = prevScroll;
+  }
 }
 
 function renderChainTable(d, spot) {
@@ -992,13 +1009,17 @@ function renderChainTable(d, spot) {
     return;
   }
 
+  // Find the ATM strike once (nearest to spot) instead of per-row (O(n) not O(n²)).
+  let atmStrike = rows[0].strike, atmBest = Infinity;
+  rows.forEach(r => { const df = Math.abs(r.strike - spot); if (df < atmBest) { atmBest = df; atmStrike = r.strike; } });
+
   body.innerHTML = rows.map(r => {
     const strike = r.strike;
     const c = r.call || {};
     const p = r.put || {};
     const callITM = spot > strike;
     const putITM = strike > spot;
-    const isATM = rows.length > 1 && Math.abs(strike - spot) === Math.min(...rows.map(x => Math.abs(x.strike - spot)));
+    const isATM = rows.length > 1 && strike === atmStrike;
     const isCustom = r.custom;
 
     const callBg = callITM ? 'bg-emerald-950/30' : '';
@@ -1008,7 +1029,7 @@ function renderChainTable(d, spot) {
     const badge = (itm, col) => `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
       itm ? `bg-${col}-500/20 text-${col}-300` : 'bg-slate-800 text-slate-600'}">${itm?'ITM':'OTM'}</span>`;
 
-    return `<tr class="${atmBorder} hover:bg-slate-800/40 transition-colors">
+    return `<tr class="${atmBorder} hover:bg-slate-800/40 transition-colors" ${isATM ? 'data-atm="1"' : ''}>
       <td class="py-2 px-2 ${callBg}">${badge(callITM,'emerald')}</td>
       <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} ${callITM?'text-slate-400':'text-slate-600'}">${fmtOI(c.oi)}</td>
       <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-600">${Number(c.iv||0).toFixed(1)}</td>
