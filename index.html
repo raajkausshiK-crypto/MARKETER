@@ -441,11 +441,13 @@ function onDataUpdated(sym) {
 // the screener metrics and drill-in are always exact and instant. To avoid a
 // 40-request burst that would trip Upstox rate limits, background stocks are
 // refreshed on a rotating batch, while on-screen chains stay fast.
-const FAST_MS = 2000;    // on-screen chains (selected symbol / quad panes)
-const BG_TICK_MS = 500;  // how often to fire a background batch
-const BG_BATCH = 3;      // background symbols refreshed per batch
-const PRELOAD_STAGGER = 120; // ms between each stock's initial fetch
-const MAX_INFLIGHT = 6;  // cap concurrent requests so we never burst Upstox
+// Conservative rates: Upstox rate-limits hard, so background refreshes are
+// slow and low-concurrency. The server-side cache smooths the rest.
+const FAST_MS = 2500;    // on-screen chains (selected symbol / quad panes)
+const BG_TICK_MS = 900;  // how often to fire a background refresh
+const BG_BATCH = 1;      // background symbols refreshed per tick
+const PRELOAD_STAGGER = 300; // ms between each stock's initial fetch
+const MAX_INFLIGHT = 4;  // cap concurrent requests so we never burst Upstox
 let fastTimer = null, bgTimer = null, bgIndex = 0;
 let inFlight = 0;        // live request count (maintained in fetchChain)
 
