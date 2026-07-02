@@ -41,6 +41,10 @@ _CACHE = {}
 _CACHE_TTL = 3.0        # seconds a cached chain is considered fresh
 _CACHE_MAX = 200        # guard against unbounded growth
 
+# Last known-good chain per symbol, served if a refresh fails/returns empty.
+_GOOD = {}
+_GOOD_TTL = 90.0        # serve stale-but-good data up to this long on failure
+
 # Instrument keys and expiry lists don't change intraday, so cache them for a
 # long time. This keeps the flaky /instruments/search and /option/contract
 # endpoints off the hot path (they were the ones intermittently rate-limiting
@@ -215,6 +219,12 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
         "put": _leg(r.get("put_options")),
     } for r in data]
 
+    # Trim the dead tail: drop strikes with no activity at all (0 OI and 0 LTP
+    # on both call and put). These far-OTM strikes just render as rows of zeros.
+    live = [r for r in rows
+            if r["call"]["oi"] or r["put"]["oi"] or r["call"]["ltp"] or r["put"]["ltp"]]
+    rows = live or rows
+
     return {
         "type": "chain", "symbol": symbol, "spot": round(spot, 2),
         "expiry": expiry, "expiries": expiries, "rows": rows,
@@ -263,25 +273,46 @@ def get_chain(symbol, expiry):
     return build_option_chain(symbol, instrument_key, expiry, expiries)
 
 
-def get_chain_cached(symbol, expiry):
-    """get_chain() with a short TTL cache to throttle upstream Upstox calls.
+def _is_good(payload):
+    """A real, non-empty option chain (not an error / synthetic-empty fallback)."""
+    return bool(payload and payload.get("rows") and not payload.get("cash_only"))
 
-    On error we still raise (so errors are never cached); only successful
-    payloads are stored, and only for _CACHE_TTL seconds.
+
+def get_chain_cached(symbol, expiry):
+    """get_chain() with a short TTL cache + stale-while-error fallback.
+
+    - Fresh good chains are cached for _CACHE_TTL seconds.
+    - If a refresh fails or returns an empty/synthetic chain, we serve the last
+      known-good chain for up to _GOOD_TTL seconds so a stock never flips to
+      "Error" or a wall of zeros just because Upstox rate-limited one request.
     """
     key = (symbol.upper(), expiry or "")
     now = time.time()
+
     hit = _CACHE.get(key)
     if hit and (now - hit[0]) < _CACHE_TTL:
         return hit[1]
 
-    payload = get_chain(symbol, expiry)
+    try:
+        payload = get_chain(symbol, expiry)
+    except UpstoxError:
+        payload = None
 
-    if len(_CACHE) >= _CACHE_MAX:          # simple size guard: drop oldest entry
-        oldest = min(_CACHE, key=lambda k: _CACHE[k][0])
-        _CACHE.pop(oldest, None)
-    _CACHE[key] = (now, payload)
-    return payload
+    if _is_good(payload):
+        if len(_CACHE) >= _CACHE_MAX:      # simple size guard: drop oldest entry
+            _CACHE.pop(min(_CACHE, key=lambda k: _CACHE[k][0]), None)
+        _CACHE[key] = (now, payload)
+        _GOOD[key] = (now, payload)
+        return payload
+
+    # Refresh failed / empty / synthetic — prefer a recent last-good chain.
+    stale = _GOOD.get(key)
+    if stale and (now - stale[0]) < _GOOD_TTL:
+        return stale[1]
+
+    if payload is not None:                # genuinely cash-only or empty
+        return payload
+    raise UpstoxError(502, "Upstream unavailable and no cached chain yet.")
 
 
 # ------------------------------------------------------------------ handler
