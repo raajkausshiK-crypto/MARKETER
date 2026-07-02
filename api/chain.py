@@ -30,7 +30,7 @@ from collections import Counter
 from http.server import BaseHTTPRequestHandler
 
 UPSTOX_HOST = "https://api.upstox.com"
-STRIKES_EACH_SIDE = 10
+STRIKES_EACH_SIDE = 20   # strikes above AND below ATM -> ~41-row chain
 
 # Short-lived in-memory cache. Vercel keeps a warm Lambda between invocations,
 # so this dict persists across requests on the same instance. It collapses the

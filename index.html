@@ -690,6 +690,7 @@ function updateQuadPane(i) {
     expEl.textContent = '';
     statsEl.innerHTML = '';
     chart.innerHTML = '<div class="py-12 text-center text-slate-600 text-xs">Pick a stock to show its chain</div>';
+    delete pane.dataset.cursym;   // re-center ATM when a stock is next chosen
     return;
   }
 
@@ -699,7 +700,19 @@ function updateQuadPane(i) {
     ((d.lastSpot && d.spot && d.spot < d.lastSpot) ? 'text-rose-400' : 'text-emerald-400');
   expEl.textContent = d.expiry || '';
   statsEl.innerHTML = analyticsLineHTML(computeAnalytics(d));
+
+  // Re-rendering resets scrollTop, so preserve the user's scroll on live
+  // updates and center the ATM row the first time a symbol is shown.
+  const prevSym = pane.dataset.cursym;
+  const prevScroll = chart.scrollTop;
   chart.innerHTML = quadChainTable(d);
+  if (prevSym !== sym) {
+    pane.dataset.cursym = sym;
+    const atmRow = chart.querySelector('[data-atm="1"]');
+    if (atmRow) atmRow.scrollIntoView({ block: 'center' });
+  } else {
+    chart.scrollTop = prevScroll;
+  }
 }
 
 function updateQuadPanesFor(sym) {
@@ -716,8 +729,8 @@ function quadChainTable(d) {
   }
   let atmIdx = 0, best = Infinity;
   all.forEach((r, i) => { const df = Math.abs((r.strike || 0) - spot); if (df < best) { best = df; atmIdx = i; } });
-  const lo = Math.max(0, atmIdx - 8), hi = Math.min(all.length, atmIdx + 9);
-  const rows = all.slice(lo, hi);
+  // Show the full chain (scrollable) so the deeper 20-each-side depth is visible.
+  const rows = all;
   const atmStrike = all[atmIdx] ? all[atmIdx].strike : null;
 
   const head =
@@ -737,7 +750,7 @@ function quadChainTable(d) {
     const callITM = spot > r.strike, putITM = r.strike > spot, isATM = r.strike === atmStrike;
     const callBg = callITM ? 'bg-emerald-950/30' : '', putBg = putITM ? 'bg-rose-950/30' : '';
     const rowBorder = isATM ? 'border-y border-indigo-500/40' : 'border-b border-slate-800/50';
-    return `<tr class="${rowBorder}">
+    return `<tr class="${rowBorder}" ${isATM ? 'data-atm="1"' : ''}>
       <td class="py-1.5 px-2 text-right tabular-nums ${callBg} text-slate-500">${fmtOI(c.oi)}</td>
       <td class="py-1.5 px-2 text-right tabular-nums font-semibold ${callBg} ${callITM ? 'text-emerald-400' : 'text-slate-400'}">${fmt(c.ltp)}</td>
       <td class="py-1.5 px-2 text-center font-bold tabular-nums bg-slate-950/50 border-x border-slate-700/50 ${isATM ? 'text-indigo-400' : 'text-slate-300'}">${r.strike}</td>
