@@ -23,20 +23,70 @@ use dynamic IPs, so that restriction must be DISABLED for this to work.
 
 import json
 import os
+import time
 import urllib.parse
 import urllib.request
-from collections import Counter
 from http.server import BaseHTTPRequestHandler
 
 UPSTOX_HOST = "https://api.upstox.com"
-STRIKES_EACH_SIDE = 10
+# Real chains return the FULL strike list; this only bounds the synthetic grid
+# used for cash-only stocks that have no listed options.
+STRIKES_EACH_SIDE = 20
 
-# Fast-path map for common indices (search also works, this just saves a call).
+# Short-lived in-memory cache. Vercel keeps a warm Lambda between invocations,
+# so this dict persists across requests on the same instance. It collapses the
+# rapid 2s polling (and the same symbol requested by several panes/tabs) into
+# far fewer Upstox calls, which is what avoids hitting Upstox rate limits.
+_CACHE = {}
+_CACHE_TTL = 8.0        # seconds a cached chain is considered fresh
+_CACHE_MAX = 200        # guard against unbounded growth
+
+# Last known-good chain per symbol, served if a refresh fails/returns empty.
+_GOOD = {}
+_GOOD_TTL = 90.0        # serve stale-but-good data up to this long on failure
+
+# Instrument keys and expiry lists don't change intraday, so cache them for a
+# long time. This keeps the flaky /instruments/search and /option/contract
+# endpoints off the hot path (they were the ones intermittently rate-limiting
+# and forcing the synthetic cash-only fallback).
+_META_CACHE = {}
+_META_TTL = 1800.0      # 30 min
+
+# Fast-path map: symbol -> Upstox instrument_key. Indices AND common F&O stocks
+# are hardcoded so we skip the /instruments/search endpoint entirely — that
+# endpoint is aggressively rate-limited (HTTP 429), and since a failed search
+# never caches, stocks would otherwise re-search every poll and stay broken.
+# Equity keys are "NSE_EQ|<ISIN>".
 SYMBOL_TO_INSTRUMENT = {
+    # Indices
     "NIFTY": "NSE_INDEX|Nifty 50",
     "BANKNIFTY": "NSE_INDEX|Nifty Bank",
     "FINNIFTY": "NSE_INDEX|Nifty Fin Service",
     "MIDCPNIFTY": "NSE_INDEX|NIFTY MID SELECT",
+    "NIFTYNXT50": "NSE_INDEX|Nifty Next 50",
+    # F&O stocks (NSE_EQ|ISIN)
+    "RELIANCE": "NSE_EQ|INE002A01018",
+    "TCS": "NSE_EQ|INE467B01029",
+    "HDFCBANK": "NSE_EQ|INE040A01034",
+    "INFY": "NSE_EQ|INE009A01021",
+    "ICICIBANK": "NSE_EQ|INE090A01021",
+    "SBIN": "NSE_EQ|INE062A01020",
+    "ITC": "NSE_EQ|INE154A01025",
+    "AXISBANK": "NSE_EQ|INE238A01034",
+    "KOTAKBANK": "NSE_EQ|INE237A01028",
+    "LT": "NSE_EQ|INE018A01030",
+    "HINDUNILVR": "NSE_EQ|INE030A01027",
+    "BHARTIARTL": "NSE_EQ|INE397D01024",
+    "MARUTI": "NSE_EQ|INE585B01010",
+    "SUNPHARMA": "NSE_EQ|INE044A01036",
+    "TATAMOTORS": "NSE_EQ|INE155A01022",
+    "TATASTEEL": "NSE_EQ|INE081A01020",
+    "WIPRO": "NSE_EQ|INE075A01022",
+    "HCLTECH": "NSE_EQ|INE860A01027",
+    "BAJFINANCE": "NSE_EQ|INE296A01024",
+    "CIPLA": "NSE_EQ|INE059A01026",
+    "ZOMATO": "NSE_EQ|INE758T01015",
+    "ETERNAL": "NSE_EQ|INE758T01015",
 }
 
 
@@ -83,10 +133,26 @@ def _get(path, params):
 
 
 # ------------------------------------------------------------------ helpers
+def _meta_get(key):
+    hit = _META_CACHE.get(key)
+    if hit and (time.time() - hit[0]) < _META_TTL:
+        return hit[1]
+    return None
+
+
+def _meta_put(key, val):
+    if val:                       # never cache an empty/failed result
+        _META_CACHE[key] = (time.time(), val)
+
+
 def resolve_instrument(symbol):
     symbol = symbol.upper().strip()
     if symbol in SYMBOL_TO_INSTRUMENT:
         return SYMBOL_TO_INSTRUMENT[symbol]
+
+    cached = _meta_get(("inst", symbol))
+    if cached:
+        return cached
 
     data = _get("/v2/instruments/search", {"query": symbol}).get("data", []) or []
 
@@ -116,15 +182,20 @@ def resolve_instrument(symbol):
 
     if not ordered:
         raise UpstoxError(404, f"No NSE stock/index found for '{symbol}'")
+    _meta_put(("inst", symbol), ordered[0])
     return ordered[0]
 
 
 def get_expiries(instrument_key):
+    cached = _meta_get(("exp", instrument_key))
+    if cached:
+        return cached
     try:
         data = _get("/v2/option/contract", {"instrument_key": instrument_key}).get("data", []) or []
     except UpstoxError:
-        return []
+        return []                 # transient failure — don't cache, retry next time
     exps = sorted({(d.get("expiry") or "")[:10] for d in data if d.get("expiry")})
+    _meta_put(("exp", instrument_key), exps)
     return exps
 
 
@@ -165,49 +236,23 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
     }).get("data", []) or []
 
     spot = data[0].get("underlying_spot_price", 0.0) if data else 0.0
+
+    # Full chain: return every strike the exchange lists for this expiry,
+    # sorted low -> high. (PCR / Max Pain / OI totals then cover the whole
+    # chain, and the frontend highlights ATM + windows as it sees fit.)
     data.sort(key=lambda r: r.get("strike_price", 0))
-
-    if data:
-        strikes = [r.get("strike_price", 0) for r in data]
-        diffs = [round(strikes[i + 1] - strikes[i], 2) for i in range(len(strikes) - 1)]
-        diffs = [d for d in diffs if d > 0]
-        step = Counter(diffs).most_common(1)[0][0] if diffs else 0
-
-        atm_idx = min(range(len(data)),
-                      key=lambda i: abs(data[i].get("strike_price", 0) - spot))
-        atm = data[atm_idx].get("strike_price", 0)
-
-        if step > 0:
-            by_strike = {round(r.get("strike_price", 0), 2): r for r in data}
-
-            def find(t):
-                for s, r in by_strike.items():
-                    if abs(s - t) < 0.01:
-                        return r
-                return None
-
-            selected = [by_strike[round(atm, 2)]] if round(atm, 2) in by_strike else []
-            for i in range(1, STRIKES_EACH_SIDE + 1):
-                up = find(atm + i * step)
-                if up is None:
-                    break
-                selected.append(up)
-            for i in range(1, STRIKES_EACH_SIDE + 1):
-                dn = find(atm - i * step)
-                if dn is None:
-                    break
-                selected.append(dn)
-            data = sorted(selected, key=lambda r: r.get("strike_price", 0)) or data
-        else:
-            lo = max(0, atm_idx - STRIKES_EACH_SIDE)
-            hi = min(len(data), atm_idx + STRIKES_EACH_SIDE + 1)
-            data = data[lo:hi]
 
     rows = [{
         "strike": r.get("strike_price"),
         "call": _leg(r.get("call_options")),
         "put": _leg(r.get("put_options")),
     } for r in data]
+
+    # Trim the dead tail: drop strikes with no activity at all (0 OI and 0 LTP
+    # on both call and put). These far-OTM strikes just render as rows of zeros.
+    live = [r for r in rows
+            if r["call"]["oi"] or r["put"]["oi"] or r["call"]["ltp"] or r["put"]["ltp"]]
+    rows = live or rows
 
     return {
         "type": "chain", "symbol": symbol, "spot": round(spot, 2),
@@ -257,6 +302,49 @@ def get_chain(symbol, expiry):
     return build_option_chain(symbol, instrument_key, expiry, expiries)
 
 
+def _is_good(payload):
+    """A real, non-empty option chain (not an error / synthetic-empty fallback)."""
+    return bool(payload and payload.get("rows") and not payload.get("cash_only"))
+
+
+def get_chain_cached(symbol, expiry):
+    """get_chain() with a short TTL cache + stale-while-error fallback.
+
+    - Fresh good chains are cached for _CACHE_TTL seconds.
+    - If a refresh fails or returns an empty/synthetic chain, we serve the last
+      known-good chain for up to _GOOD_TTL seconds so a stock never flips to
+      "Error" or a wall of zeros just because Upstox rate-limited one request.
+    """
+    key = (symbol.upper(), expiry or "")
+    now = time.time()
+
+    hit = _CACHE.get(key)
+    if hit and (now - hit[0]) < _CACHE_TTL:
+        return hit[1]
+
+    try:
+        payload = get_chain(symbol, expiry)
+        err = None
+    except UpstoxError as e:
+        payload, err = None, e
+
+    if _is_good(payload):
+        if len(_CACHE) >= _CACHE_MAX:      # simple size guard: drop oldest entry
+            _CACHE.pop(min(_CACHE, key=lambda k: _CACHE[k][0]), None)
+        _CACHE[key] = (now, payload)
+        _GOOD[key] = (now, payload)
+        return payload
+
+    # Refresh failed / empty / synthetic — prefer a recent last-good chain.
+    stale = _GOOD.get(key)
+    if stale and (now - stale[0]) < _GOOD_TTL:
+        return stale[1]
+
+    if payload is not None:                # genuinely cash-only or empty
+        return payload
+    raise err or UpstoxError(502, "Upstream unavailable and no cached chain yet.")
+
+
 # ------------------------------------------------------------------ handler
 class handler(BaseHTTPRequestHandler):
     """Classic Vercel Python serverless function entrypoint."""
@@ -268,7 +356,7 @@ class handler(BaseHTTPRequestHandler):
         expiry = params.get("expiry", [None])[0] or None
 
         try:
-            payload = get_chain(symbol, expiry)
+            payload = get_chain_cached(symbol, expiry)
         except UpstoxError as e:
             payload = {"type": "error", "message": e.message, "status": e.status}
         except Exception as e:  # pragma: no cover
