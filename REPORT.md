@@ -47,7 +47,28 @@ Vercel.
   uniform strike grid, and synthetic chains for cash-only stocks.
 - Reads the token from the `UPSTOX_ACCESS_TOKEN` environment variable.
 
-### 2.4 Supporting files
+### 2.4 Screener + resilience upgrades (later iterations)
+Subsequent commits evolved the app from a single chain view into a full,
+rate-limit-resilient screener:
+
+- **Grid screener UI** — `index.html` now renders a grid of live chain panes
+  (quad-style) so multiple stocks' full chains are visible at once, with
+  internal scroll, ATM-centered rows, and a sticky header.
+- **Full option chain** — returns all listed strikes per expiry (not just a
+  ±10 window), with dead/zero strikes trimmed.
+- **Caching** — `api/chain.py` caches chains for ~8s (`_CACHE_TTL`) and serves
+  last-known-good data for up to 90s (`_GOOD_TTL`) on failure, so a stock never
+  flips to "Error" or a wall of zeros from a single rate-limited request.
+  Metadata (expiries/instrument keys) cached ~30 min (`_META_TTL`).
+- **Rate-limit handling** — hard-throttled polling, gentler background refresh,
+  and adaptive backoff on HTTP 429 so the app self-heals.
+- **Hardcoded F&O instrument keys** — ~26 common symbols (indices + large-cap
+  equities) are hardcoded to skip the aggressively rate-limited
+  `/instruments/search` endpoint entirely.
+- **Better errors** — surfaces the real upstream Upstox error instead of a
+  generic 502.
+
+### 2.5 Supporting files
 - `vercel.json` — `{ "cleanUrls": true }`.
 - `README.md`, `.gitignore`.
 - `options_screener.html` — the original standalone prototype (kept for reference).
