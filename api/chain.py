@@ -21,6 +21,7 @@ NOTE: Upstox may enforce a static-IP allowlist on your API app. Vercel functions
 use dynamic IPs, so that restriction must be DISABLED for this to work.
 """
 
+import datetime
 import json
 import os
 import time
@@ -51,6 +52,10 @@ _GOOD_TTL = 90.0        # serve stale-but-good data up to this long on failure
 # and forcing the synthetic cash-only fallback).
 _META_CACHE = {}
 _META_TTL = 1800.0      # 30 min
+
+# Price candles for the stock graph; one Upstox call per symbol per minute.
+_CANDLE_CACHE = {}
+_CANDLE_TTL = 60.0
 
 # Fast-path map: symbol -> Upstox instrument_key. Indices AND common F&O stocks
 # are hardcoded so we skip the /instruments/search endpoint entirely — that
@@ -345,6 +350,47 @@ def get_chain_cached(symbol, expiry):
     raise err or UpstoxError(502, "Upstream unavailable and no cached chain yet.")
 
 
+# ------------------------------------------------------------------ candles
+def get_candles(symbol):
+    """Intraday 1-minute price candles for the stock graph; falls back to
+    daily candles (last ~45 days) when the market is closed / intraday empty.
+
+    Returns {"type": "candles", "symbol", "interval", "candles": [[ts,o,h,l,c], ...]}
+    in chronological order.
+    """
+    instrument_key = resolve_instrument(symbol)
+    enc = urllib.parse.quote(instrument_key, safe="")
+
+    interval = "1minute"
+    try:
+        data = _get(f"/v2/historical-candle/intraday/{enc}/1minute", {}).get("data", {}) or {}
+        candles = data.get("candles") or []
+    except UpstoxError:
+        candles = []
+
+    if not candles:
+        interval = "day"
+        to = datetime.date.today()
+        frm = to - datetime.timedelta(days=45)
+        data = _get(f"/v2/historical-candle/{enc}/day/{to}/{frm}", {}).get("data", {}) or {}
+        candles = data.get("candles") or []
+
+    # Upstox returns newest-first: [ts, open, high, low, close, volume, oi]
+    candles = [[c[0], c[1], c[2], c[3], c[4]] for c in reversed(candles)]
+    return {"type": "candles", "symbol": symbol, "interval": interval, "candles": candles}
+
+
+def get_candles_cached(symbol):
+    now = time.time()
+    hit = _CANDLE_CACHE.get(symbol)
+    if hit and (now - hit[0]) < _CANDLE_TTL:
+        return hit[1]
+    payload = get_candles(symbol)
+    if payload.get("candles"):             # don't cache empty results
+        _CANDLE_CACHE[symbol] = (now, payload)
+    return payload
+
+
 # ------------------------------------------------------------------ handler
 class handler(BaseHTTPRequestHandler):
     """Classic Vercel Python serverless function entrypoint."""
@@ -354,9 +400,10 @@ class handler(BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(qs)
         symbol = (params.get("symbol", ["NIFTY"])[0] or "NIFTY").upper().strip()
         expiry = params.get("expiry", [None])[0] or None
+        want_candles = bool(params.get("candles"))
 
         try:
-            payload = get_chain_cached(symbol, expiry)
+            payload = get_candles_cached(symbol) if want_candles else get_chain_cached(symbol, expiry)
         except UpstoxError as e:
             payload = {"type": "error", "message": e.message, "status": e.status}
         except Exception as e:  # pragma: no cover

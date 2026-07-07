@@ -868,7 +868,7 @@ function fillChainPane(pane, sym) {
   const prevScroll = chart.scrollTop;
 
   if (paneGraph) {
-    chart.innerHTML = renderOIGraph(d, d.spot || 0);
+    chart.innerHTML = renderStockGraph(sym, d);
     chart.scrollTop = prevScroll;   // graphs keep the user's scroll on live updates
     pane.dataset.cursym = sym;
     return;
@@ -1067,7 +1067,7 @@ function renderDetail() {
 
   if (chartMode === 'graph') {
     const prevG = graphEl.scrollTop;
-    graphEl.innerHTML = renderOIGraph(d, spot);
+    graphEl.innerHTML = renderStockGraph(selectedSymbol, d);
     graphEl.scrollTop = prevG;   // keep scroll on live updates
     return;
   }
@@ -1105,44 +1105,87 @@ function toggleGraph() {
   renderDetail();
 }
 
-// Classic OI profile: Call OI bars (left, green) vs Put OI bars (right, red)
-// per strike, ATM highlighted, max-OI strikes = support/resistance.
-function renderOIGraph(d, spot) {
-  const rows = applyGap(d.rows || [], spot);
-  if (!rows.length) {
-    return `<div class="py-12 text-center text-slate-600 text-sm">${d.error || (d.loading ? 'Loading…' : 'No data')}</div>`;
+// ========================= STOCK PRICE GRAPH =========================
+// Real price chart from Upstox candles (intraday 1-min; daily when the
+// market is closed). Fetched lazily per symbol, cached for a minute.
+const candleCache = new Map();   // sym -> { t, candles, interval, fetching }
+const CANDLE_TTL = 60000;
+
+function ensureCandles(sym) {
+  const e = candleCache.get(sym) || {};
+  const now = Date.now();
+  if (e.fetching || (e.t && now - e.t < CANDLE_TTL)) return;
+  e.fetching = true;
+  candleCache.set(sym, e);
+  fetch(`${API_BASE}/api/chain?symbol=${encodeURIComponent(sym)}&candles=1`, { cache: 'no-store' })
+    .then(r => r.json())
+    .then(data => {
+      e.fetching = false;
+      if (data.type === 'candles') {
+        e.t = Date.now();
+        e.candles = data.candles || [];
+        e.interval = data.interval;
+      }
+      candleCache.set(sym, e);
+      // Re-render whatever is currently showing this symbol's graph.
+      if (viewMode === 'single' && selectedSymbol === sym && chartMode === 'graph') renderDetail();
+      else if (viewMode === 'quad') updateQuadPanesFor(sym);
+      else if (viewMode === 'screener') updateScreenerPaneFor(sym);
+    })
+    .catch(() => { e.fetching = false; candleCache.set(sym, e); });
+}
+
+// SVG line chart of closes with area fill, min/max gridlines and time labels.
+function renderStockGraph(sym, d) {
+  ensureCandles(sym);
+  const e = candleCache.get(sym);
+  const candles = e && e.candles;
+  if (!candles || !candles.length) {
+    return `<div class="py-12 text-center text-slate-600 text-xs">${e && e.t ? 'No chart data available' : 'Loading price chart…'}</div>`;
   }
-  const maxOI = Math.max(1, ...rows.map(r => Math.max(r.call?.oi || 0, r.put?.oi || 0)));
-  let atm = rows[0].strike, best = Infinity;
-  rows.forEach(r => { const df = Math.abs(r.strike - spot); if (df < best) { best = df; atm = r.strike; } });
-  let maxC = -1, maxP = -1, res = null, sup = null;
-  rows.forEach(r => {
-    if ((r.call?.oi || 0) > maxC) { maxC = r.call?.oi || 0; res = r.strike; }
-    if ((r.put?.oi || 0) > maxP) { maxP = r.put?.oi || 0; sup = r.strike; }
-  });
 
-  const bars = rows.map(r => {
-    const c = r.call?.oi || 0, p = r.put?.oi || 0;
-    const cw = (c / maxOI * 100).toFixed(1), pw = (p / maxOI * 100).toFixed(1);
-    const isATM = r.strike === atm;
-    const mark = r.strike === res ? '<span class="text-rose-400 text-[9px] ml-1">R</span>'
-               : r.strike === sup ? '<span class="text-emerald-400 text-[9px] ml-1">S</span>' : '';
-    return `<div class="flex items-center gap-2 py-[3px] ${isATM ? 'bg-indigo-500/10 rounded' : ''}">
-      <div class="w-14 text-right text-[10px] tabular-nums text-slate-500 shrink-0">${fmtOI(c)}</div>
-      <div class="flex-1 flex justify-end"><div class="h-3.5 rounded-l bg-emerald-500/70" style="width:${cw}%" title="Call OI ${fmtOI(c)}"></div></div>
-      <div class="w-20 text-center text-[11px] font-bold tabular-nums shrink-0 ${isATM ? 'text-indigo-400' : 'text-slate-300'}">${r.strike}${isATM ? '<span class="text-indigo-500 text-[9px] ml-1">ATM</span>' : ''}${mark}</div>
-      <div class="flex-1"><div class="h-3.5 rounded-r bg-rose-500/70" style="width:${pw}%" title="Put OI ${fmtOI(p)}"></div></div>
-      <div class="w-14 text-left text-[10px] tabular-nums text-slate-500 shrink-0">${fmtOI(p)}</div>
-    </div>`;
-  }).join('');
+  const W = 640, H = 240, P = { t: 14, r: 62, b: 24, l: 10 };
+  const closes = candles.map(c => c[4]);
+  const lo = Math.min(...closes), hi = Math.max(...closes);
+  const span = (hi - lo) || 1;
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const x = i => P.l + (i / (closes.length - 1 || 1)) * iw;
+  const y = v => P.t + (1 - (v - lo) / span) * ih;
 
-  return `<div class="p-4">
-    <div class="flex items-center justify-between mb-3 text-[10px] uppercase tracking-wider">
-      <span class="text-emerald-400 font-semibold">&#9668; Call OI (resistance)</span>
-      <span class="text-slate-500">Strike &middot; S = max Put OI &middot; R = max Call OI</span>
-      <span class="text-rose-400 font-semibold">Put OI (support) &#9658;</span>
+  const pts = closes.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const first = closes[0], last = closes[closes.length - 1];
+  const up = last >= first;
+  const col = up ? '#34d399' : '#fb7185';
+  const gid = `grad-${sym.replace(/[^A-Z0-9]/gi, '')}`;
+  const area = `M ${x(0).toFixed(1)},${y(first).toFixed(1)} L ${pts.split(' ').join(' L ')} L ${x(closes.length - 1).toFixed(1)},${(H - P.b).toFixed(1)} L ${x(0).toFixed(1)},${(H - P.b).toFixed(1)} Z`;
+
+  const isDaily = e.interval === 'day';
+  const lbl = ts => isDaily
+    ? new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const mid = Math.floor((candles.length - 1) / 2);
+  const grid = [hi, (hi + lo) / 2, lo];
+
+  return `<div class="p-3">
+    <div class="flex justify-between items-baseline mb-1 px-1">
+      <span class="text-[10px] uppercase tracking-wider text-slate-500">${isDaily ? 'Daily (45d)' : 'Intraday (1m)'} &middot; ${sym}</span>
+      <span class="text-xs font-bold tabular-nums" style="color:${col}">${fmt(last)} <span class="font-medium">(${up ? '+' : ''}${(((last - first) / first) * 100).toFixed(2)}%)</span></span>
     </div>
-    ${bars}
+    <svg viewBox="0 0 ${W} ${H}" class="w-full" style="min-height:180px">
+      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${col}" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
+      </linearGradient></defs>
+      ${grid.map(v => `
+        <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1e293b" stroke-dasharray="3,4"/>
+        <text x="${W - P.r + 6}" y="${(y(v) + 3.5).toFixed(1)}" fill="#64748b" font-size="10" font-family="inherit">${fmt(v)}</text>`).join('')}
+      <path d="${area}" fill="url(#${gid})"/>
+      <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(closes.length - 1).toFixed(1)}" cy="${y(last).toFixed(1)}" r="3" fill="${col}"/>
+      <text x="${P.l}" y="${H - 8}" fill="#64748b" font-size="10">${lbl(candles[0][0])}</text>
+      <text x="${(P.l + iw / 2).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="middle">${lbl(candles[mid][0])}</text>
+      <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="end">${lbl(candles[candles.length - 1][0])}</text>
+    </svg>
   </div>`;
 }
 
