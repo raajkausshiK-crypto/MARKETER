@@ -802,6 +802,8 @@ function buildScreenerPane(sym) {
        </div>
        <div class="flex items-center gap-2">
          <span data-role="exp" class="text-[10px] text-slate-500 whitespace-nowrap"></span>
+         <button data-role="graphbtn" onclick="togglePaneGraph(this, event)" title="Toggle OI graph"
+           class="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-indigo-400 hover:border-indigo-500 transition">&#128202;</button>
          <button onclick="removeWatchlistItem('${sym}', event)" class="text-slate-600 hover:text-rose-400 text-xs" title="Remove">&#10005;</button>
        </div>
      </div>
@@ -856,8 +858,22 @@ function fillChainPane(pane, sym) {
           : analyticsLineHTML(computeAnalytics(d)));
   }
 
+  // Per-pane table/graph mode (toggled by the pane's 📊 button).
+  const paneGraph = pane.dataset.chart === 'graph';
+  const gBtn = pane.querySelector('[data-role="graphbtn"]');
+  if (gBtn) gBtn.className = 'text-xs px-1.5 py-0.5 rounded border transition ' +
+    (paneGraph ? 'border-indigo-500 text-indigo-400' : 'border-slate-700 text-slate-500 hover:text-indigo-400 hover:border-indigo-500');
+
   const prevSym = pane.dataset.cursym;
   const prevScroll = chart.scrollTop;
+
+  if (paneGraph) {
+    chart.innerHTML = renderOIGraph(d, d.spot || 0);
+    chart.scrollTop = prevScroll;   // graphs keep the user's scroll on live updates
+    pane.dataset.cursym = sym;
+    return;
+  }
+
   chart.innerHTML = quadChainTable(d);
   if (prevSym !== sym) {
     requestAnimationFrame(() => {
@@ -871,6 +887,17 @@ function fillChainPane(pane, sym) {
   } else {
     chart.scrollTop = prevScroll;
   }
+}
+
+// Toggle one quad/screener pane between its chain table and the OI graph.
+function togglePaneGraph(btn, e) {
+  e && e.stopPropagation();
+  const pane = btn.closest('[data-sym], [data-slot]');
+  if (!pane) return;
+  pane.dataset.chart = pane.dataset.chart === 'graph' ? 'table' : 'graph';
+  delete pane.dataset.cursym;   // re-center ATM when returning to the table
+  const sym = pane.getAttribute('data-sym') || quadSlots[Number(pane.getAttribute('data-slot'))];
+  fillChainPane(pane, sym);
 }
 
 // ========================= RENDER: QUAD (2x2) VIEW =========================
@@ -905,7 +932,11 @@ function buildQuadPane(i) {
          <select data-role="pick" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs font-semibold focus:outline-none focus:border-indigo-500">${opts}</select>
          <span data-role="spot" class="text-sm font-bold tabular-nums text-slate-300 truncate"></span>
        </div>
-       <span data-role="exp" class="text-[10px] text-slate-500 whitespace-nowrap"></span>
+       <div class="flex items-center gap-2">
+         <span data-role="exp" class="text-[10px] text-slate-500 whitespace-nowrap"></span>
+         <button data-role="graphbtn" onclick="togglePaneGraph(this, event)" title="Toggle OI graph"
+           class="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-indigo-400 hover:border-indigo-500 transition">&#128202;</button>
+       </div>
      </div>
      <div data-role="stats"></div>
      <div data-role="chart" class="overflow-y-auto" style="max-height:340px;"></div>`;
