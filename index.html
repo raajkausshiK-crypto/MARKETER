@@ -152,6 +152,14 @@
           </div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
+          <button id="gapToggleBtn" onclick="toggleGap()" title="Filter strikes to a price-based gap"
+            class="bg-slate-800 border border-slate-700 hover:border-indigo-500 text-sm px-3 py-2 rounded-lg font-medium transition text-indigo-400">
+            Gap: auto
+          </button>
+          <button id="graphToggleBtn" onclick="toggleGraph()" title="Toggle OI graph view"
+            class="bg-slate-800 border border-slate-700 hover:border-indigo-500 text-sm px-3 py-2 rounded-lg font-medium transition text-slate-300">
+            &#128202; Graph
+          </button>
           <select id="expirySelect" onchange="changeExpiry()"
             class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition">
             <option value="">Expiry</option>
@@ -197,6 +205,9 @@
         </table>
       </div>
 
+      <!-- OI Graph (toggled by the Graph button) -->
+      <div id="chainGraph" class="hidden overflow-auto" style="max-height:70vh;"></div>
+
       <!-- Cash-only / info banner -->
       <div id="chainInfo" class="hidden px-4 py-2.5 text-xs border-t border-slate-800"></div>
     </div>
@@ -233,6 +244,36 @@ let viewMode = 'single';
 let quadSlots = [null, null, null, null];   // which symbol each of the 4 panes shows
 let quadMembershipSig = '';                  // to know when to rebuild the pane shells
 let detailCurSym = null;                      // last symbol the detail table centered on
+
+// Strike-gap filter: show strikes spaced by a gap that scales with the stock
+// price (captures meaningful moves instead of every tiny listed strike).
+let gapMode = true;
+// Graph view: 'table' shows the chain table, 'graph' the Call/Put OI bars.
+let chartMode = 'table';
+
+// Price -> strike gap: 100-750 => 50, 750-2100 => 100, 2100-5000 => 200,
+// 5000+ => 500. Below 100 the listed strikes are already coarse; no filter.
+function strikeGapFor(spot) {
+  if (spot >= 5000) return 500;
+  if (spot >= 2100) return 200;
+  if (spot >= 750) return 100;
+  if (spot >= 100) return 50;
+  return 0;
+}
+
+// Keep only strikes on the gap grid (ATM-relevant moves). Custom strikes are
+// merged after this, so they always survive. Falls back to the full list if
+// filtering would leave too few rows (e.g. odd strike schemes).
+function applyGap(rows, spot) {
+  if (!gapMode || !spot) return rows;
+  const gap = strikeGapFor(spot);
+  if (!gap) return rows;
+  const on = rows.filter(r => {
+    const m = Math.abs(r.strike) % gap;
+    return m < 0.001 || gap - m < 0.001;
+  });
+  return on.length >= 3 ? on : rows;
+}
 
 const fmt = v => Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtOI = v => {
@@ -891,13 +932,13 @@ function updateQuadPanesFor(sym) {
 // Compact chain table (windowed around ATM) for a quad pane.
 function quadChainTable(d) {
   const spot = d.spot || 0;
-  const all = d.rows || [];
+  const all = applyGap(d.rows || [], spot);   // price-based strike gap
   if (!all.length) {
     return `<div class="py-12 text-center text-slate-600 text-xs">${d.error || (d.loading ? 'Loading…' : 'No data')}</div>`;
   }
   let atmIdx = 0, best = Infinity;
   all.forEach((r, i) => { const df = Math.abs((r.strike || 0) - spot); if (df < best) { best = df; atmIdx = i; } });
-  // Show the full chain (scrollable) so the deeper 20-each-side depth is visible.
+  // Show the full (gap-filtered) chain, scrollable.
   const rows = all;
   const atmStrike = all[atmIdx] ? all[atmIdx].strike : null;
 
@@ -977,9 +1018,31 @@ function renderDetail() {
     info.className = 'hidden';
   }
 
+  // Keep the Gap button label in sync with the current price bracket.
+  const gapBtn = document.getElementById('gapToggleBtn');
+  const gap = strikeGapFor(spot);
+  gapBtn.textContent = gapMode ? (gap ? `Gap: ${gap}` : 'Gap: auto') : 'All strikes';
+  gapBtn.className = 'bg-slate-800 border border-slate-700 hover:border-indigo-500 text-sm px-3 py-2 rounded-lg font-medium transition ' +
+    (gapMode ? 'text-indigo-400' : 'text-slate-400');
+
+  // Table vs Graph
+  const scroll = document.getElementById('chainScroll');
+  const graphEl = document.getElementById('chainGraph');
+  const graphBtn = document.getElementById('graphToggleBtn');
+  graphBtn.className = 'bg-slate-800 border text-sm px-3 py-2 rounded-lg font-medium transition ' +
+    (chartMode === 'graph' ? 'border-indigo-500 text-indigo-400' : 'border-slate-700 hover:border-indigo-500 text-slate-300');
+  scroll.classList.toggle('hidden', chartMode === 'graph');
+  graphEl.classList.toggle('hidden', chartMode !== 'graph');
+
+  if (chartMode === 'graph') {
+    const prevG = graphEl.scrollTop;
+    graphEl.innerHTML = renderOIGraph(d, spot);
+    graphEl.scrollTop = prevG;   // keep scroll on live updates
+    return;
+  }
+
   // Rebuild the chain, then center the ATM row the first time this symbol is
   // shown (full chains are long) and preserve the user's scroll on updates.
-  const scroll = document.getElementById('chainScroll');
   const prevScroll = scroll.scrollTop;
   renderChainTable(d, spot);
   if (detailCurSym !== selectedSymbol) {
@@ -996,12 +1059,68 @@ function renderDetail() {
   }
 }
 
+// ========================= GAP / GRAPH TOGGLES =========================
+function toggleGap() {
+  gapMode = !gapMode;
+  detailCurSym = null;              // re-center ATM after the row set changes
+  renderDetail();
+  if (viewMode === 'quad') renderQuad();
+  else if (viewMode === 'screener') renderScreener();
+}
+
+function toggleGraph() {
+  chartMode = chartMode === 'graph' ? 'table' : 'graph';
+  detailCurSym = null;
+  renderDetail();
+}
+
+// Classic OI profile: Call OI bars (left, green) vs Put OI bars (right, red)
+// per strike, ATM highlighted, max-OI strikes = support/resistance.
+function renderOIGraph(d, spot) {
+  const rows = applyGap(d.rows || [], spot);
+  if (!rows.length) {
+    return `<div class="py-12 text-center text-slate-600 text-sm">${d.error || (d.loading ? 'Loading…' : 'No data')}</div>`;
+  }
+  const maxOI = Math.max(1, ...rows.map(r => Math.max(r.call?.oi || 0, r.put?.oi || 0)));
+  let atm = rows[0].strike, best = Infinity;
+  rows.forEach(r => { const df = Math.abs(r.strike - spot); if (df < best) { best = df; atm = r.strike; } });
+  let maxC = -1, maxP = -1, res = null, sup = null;
+  rows.forEach(r => {
+    if ((r.call?.oi || 0) > maxC) { maxC = r.call?.oi || 0; res = r.strike; }
+    if ((r.put?.oi || 0) > maxP) { maxP = r.put?.oi || 0; sup = r.strike; }
+  });
+
+  const bars = rows.map(r => {
+    const c = r.call?.oi || 0, p = r.put?.oi || 0;
+    const cw = (c / maxOI * 100).toFixed(1), pw = (p / maxOI * 100).toFixed(1);
+    const isATM = r.strike === atm;
+    const mark = r.strike === res ? '<span class="text-rose-400 text-[9px] ml-1">R</span>'
+               : r.strike === sup ? '<span class="text-emerald-400 text-[9px] ml-1">S</span>' : '';
+    return `<div class="flex items-center gap-2 py-[3px] ${isATM ? 'bg-indigo-500/10 rounded' : ''}">
+      <div class="w-14 text-right text-[10px] tabular-nums text-slate-500 shrink-0">${fmtOI(c)}</div>
+      <div class="flex-1 flex justify-end"><div class="h-3.5 rounded-l bg-emerald-500/70" style="width:${cw}%" title="Call OI ${fmtOI(c)}"></div></div>
+      <div class="w-20 text-center text-[11px] font-bold tabular-nums shrink-0 ${isATM ? 'text-indigo-400' : 'text-slate-300'}">${r.strike}${isATM ? '<span class="text-indigo-500 text-[9px] ml-1">ATM</span>' : ''}${mark}</div>
+      <div class="flex-1"><div class="h-3.5 rounded-r bg-rose-500/70" style="width:${pw}%" title="Put OI ${fmtOI(p)}"></div></div>
+      <div class="w-14 text-left text-[10px] tabular-nums text-slate-500 shrink-0">${fmtOI(p)}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="p-4">
+    <div class="flex items-center justify-between mb-3 text-[10px] uppercase tracking-wider">
+      <span class="text-emerald-400 font-semibold">&#9668; Call OI (resistance)</span>
+      <span class="text-slate-500">Strike &middot; S = max Put OI &middot; R = max Call OI</span>
+      <span class="text-rose-400 font-semibold">Put OI (support) &#9658;</span>
+    </div>
+    ${bars}
+  </div>`;
+}
+
 function renderChainTable(d, spot) {
   const body = document.getElementById('chainBody');
 
-  // Merge custom strikes
+  // Gap-filter the live rows first, then merge custom strikes (customs always survive)
   const byStrike = new Map();
-  (d.rows || []).forEach(r => byStrike.set(Number(r.strike), r));
+  applyGap(d.rows || [], spot).forEach(r => byStrike.set(Number(r.strike), r));
   customStrikes.forEach(s => {
     if (!byStrike.has(s)) {
       byStrike.set(s, {
