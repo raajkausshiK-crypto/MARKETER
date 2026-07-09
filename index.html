@@ -1233,55 +1233,85 @@ function ensureCandles(sym) {
 }
 
 // SVG line chart of closes with area fill, min/max gridlines and time labels.
+// Aggregate 1-min candles into N-minute OHLC bars for readable candlesticks.
+function aggregateCandles(raw, mins) {
+  if (mins <= 1) return raw;
+  const out = [];
+  for (let i = 0; i < raw.length; i += mins) {
+    const chunk = raw.slice(i, i + mins);
+    out.push([
+      chunk[0][0],
+      chunk[0][1],
+      Math.max(...chunk.map(c => c[2])),
+      Math.min(...chunk.map(c => c[3])),
+      chunk[chunk.length - 1][4],
+    ]);
+  }
+  return out;
+}
+
 function renderStockGraph(sym, d) {
   ensureCandles(sym);
   const e = candleCache.get(sym);
-  const candles = e && e.candles;
-  if (!candles || !candles.length) {
+  const raw = e && e.candles;
+  if (!raw || !raw.length) {
     return `<div class="py-12 text-center text-slate-600 text-xs">${e && e.t ? 'No chart data available' : 'Loading price chart…'}</div>`;
   }
 
-  const W = 640, H = 240, P = { t: 14, r: 62, b: 24, l: 10 };
-  const closes = candles.map(c => c[4]);
-  const lo = Math.min(...closes), hi = Math.max(...closes);
+  const isDaily = e.interval === 'day';
+  // Aggregate intraday into 5-min candles so they're readable; daily stays as-is.
+  const candles = isDaily ? raw : aggregateCandles(raw, 5);
+  const n = candles.length;
+
+  const W = 640, H = 260, P = { t: 14, r: 62, b: 24, l: 10 };
+  const allHi = candles.map(c => c[2]), allLo = candles.map(c => c[3]);
+  const lo = Math.min(...allLo), hi = Math.max(...allHi);
   const span = (hi - lo) || 1;
   const iw = W - P.l - P.r, ih = H - P.t - P.b;
-  const x = i => P.l + (i / (closes.length - 1 || 1)) * iw;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
 
-  const pts = closes.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const first = closes[0], last = closes[closes.length - 1];
-  const up = last >= first;
-  const col = up ? '#34d399' : '#fb7185';
-  const gid = `grad-${sym.replace(/[^A-Z0-9]/gi, '')}`;
-  const area = `M ${x(0).toFixed(1)},${y(first).toFixed(1)} L ${pts.split(' ').join(' L ')} L ${x(closes.length - 1).toFixed(1)},${(H - P.b).toFixed(1)} L ${x(0).toFixed(1)},${(H - P.b).toFixed(1)} Z`;
+  const GREEN = '#34d399', RED = '#fb7185';
+  const cw = Math.max(1, Math.min(6, (iw / n) * 0.7));   // body width
+  const gap = iw / n;
 
-  const isDaily = e.interval === 'day';
+  // Draw each candlestick: wick (high-low line) + body (open-close rect)
+  let sticks = '';
+  for (let i = 0; i < n; i++) {
+    const [ts, o, h, l, c] = candles[i];
+    const cx = P.l + (i + 0.5) * gap;
+    const up = c >= o;
+    const col = up ? GREEN : RED;
+    const bodyTop = y(Math.max(o, c)), bodyBot = y(Math.min(o, c));
+    const bodyH = Math.max(1, bodyBot - bodyTop);
+    // Wick
+    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`;
+    // Body
+    sticks += `<rect x="${(cx - cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${up ? col : col}" rx="0.3" stroke="${col}" stroke-width="0.3"/>`;
+  }
+
+  const first = candles[0][1], last = candles[n-1][4];
+  const dayUp = last >= first;
+  const dayCol = dayUp ? GREEN : RED;
+  const grid = [hi, (hi + lo) / 2, lo];
+
   const lbl = ts => isDaily
     ? new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
     : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const mid = Math.floor((candles.length - 1) / 2);
-  const grid = [hi, (hi + lo) / 2, lo];
+  const mid = Math.floor((n - 1) / 2);
 
   return `<div class="p-3">
     <div class="flex justify-between items-baseline mb-1 px-1">
-      <span class="text-[10px] uppercase tracking-wider text-slate-500">${isDaily ? 'Daily (45d)' : 'Intraday (1m)'} &middot; ${sym}</span>
-      <span class="text-xs font-bold tabular-nums" style="color:${col}">${fmt(last)} <span class="font-medium">(${up ? '+' : ''}${(((last - first) / first) * 100).toFixed(2)}%)</span></span>
+      <span class="text-[10px] uppercase tracking-wider text-slate-500">${isDaily ? 'Daily (45d)' : 'Intraday (5m)'} &middot; ${sym}</span>
+      <span class="text-xs font-bold tabular-nums" style="color:${dayCol}">${fmt(last)} <span class="font-medium">(${dayUp ? '+' : ''}${(((last - first) / first) * 100).toFixed(2)}%)</span></span>
     </div>
     <svg viewBox="0 0 ${W} ${H}" class="w-full" style="min-height:180px">
-      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${col}" stop-opacity="0.25"/>
-        <stop offset="100%" stop-color="${col}" stop-opacity="0"/>
-      </linearGradient></defs>
       ${grid.map(v => `
         <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1e293b" stroke-dasharray="3,4"/>
         <text x="${W - P.r + 6}" y="${(y(v) + 3.5).toFixed(1)}" fill="#64748b" font-size="10" font-family="inherit">${fmt(v)}</text>`).join('')}
-      <path d="${area}" fill="url(#${gid})"/>
-      <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
-      <circle cx="${x(closes.length - 1).toFixed(1)}" cy="${y(last).toFixed(1)}" r="3" fill="${col}"/>
+      ${sticks}
       <text x="${P.l}" y="${H - 8}" fill="#64748b" font-size="10">${lbl(candles[0][0])}</text>
       <text x="${(P.l + iw / 2).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="middle">${lbl(candles[mid][0])}</text>
-      <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="end">${lbl(candles[candles.length - 1][0])}</text>
+      <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="end">${lbl(candles[n-1][0])}</text>
     </svg>
   </div>`;
 }
