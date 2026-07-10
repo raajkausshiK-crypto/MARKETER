@@ -148,6 +148,10 @@
             class="bg-slate-800 border border-slate-700 hover:border-indigo-500 text-sm px-3 py-2 rounded-lg font-medium transition text-slate-300">
             &#128202; Graph
           </button>
+          <button id="alertToggleBtn" onclick="toggleAlertPanel()" title="Set price alert"
+            class="bg-slate-800 border border-slate-700 hover:border-amber-500 text-sm px-3 py-2 rounded-lg font-medium transition text-slate-300">
+            &#128276; Alert
+          </button>
           <select id="expirySelect" onchange="changeExpiry()"
             class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition">
             <option value="">Expiry</option>
@@ -165,6 +169,26 @@
 
       <!-- Analytics strip (PCR / Max Pain / S-R / OI / straddle) -->
       <div id="detailAnalytics" class="hidden"></div>
+
+      <!-- Price Alert Panel -->
+      <div id="alertPanel" class="hidden border-b border-slate-800 bg-amber-500/5 px-4 py-2.5">
+        <div class="flex items-center gap-3 flex-wrap text-xs">
+          <span class="text-amber-400 font-semibold">&#128276; Price Alert</span>
+          <div class="flex items-center gap-1.5">
+            <label class="text-slate-500">Above:</label>
+            <input id="alertAbove" type="number" step="any"
+              class="w-28 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 tabular-nums" placeholder="e.g. 25000">
+          </div>
+          <div class="flex items-center gap-1.5">
+            <label class="text-slate-500">Below:</label>
+            <input id="alertBelow" type="number" step="any"
+              class="w-28 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 tabular-nums" placeholder="e.g. 24000">
+          </div>
+          <button onclick="saveAlert()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-md text-xs font-semibold transition">Set Alert</button>
+          <button onclick="clearAlert()" class="text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-500 px-3 py-1.5 rounded-md text-xs font-medium transition">Clear</button>
+          <span id="alertStatus" class="text-[10px] text-slate-600 ml-auto"></span>
+        </div>
+      </div>
 
       <!-- Chain Table (internally scrollable so the full chain stays usable) -->
       <div id="chainScroll" class="overflow-auto" style="max-height:70vh;">
@@ -242,6 +266,8 @@ let gapMode = true;
 let chartMode = 'table';
 // Per-pane table/graph mode, keyed "s:<sym>" (screener) or "q:<slot>" (quad).
 let paneCharts = {};
+// Price alerts: sym -> { above: number|null, below: number|null, aboveFired: bool, belowFired: bool }
+let priceAlerts = {};
 
 // ========================= PERSISTENCE =========================
 // The watchlist and view settings survive reloads/reconnects via localStorage.
@@ -251,7 +277,7 @@ function saveState() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       symbols: [...watchlist.keys()],
-      selectedSymbol, viewMode, quadSlots, gapMode, chartMode, paneCharts,
+      selectedSymbol, viewMode, quadSlots, gapMode, chartMode, paneCharts, priceAlerts,
     }));
   } catch (_) { /* storage unavailable — run without persistence */ }
 }
@@ -270,6 +296,7 @@ function loadState() {
     gapMode = s.gapMode !== false;
     chartMode = s.chartMode === 'graph' ? 'graph' : 'table';
     if (s.paneCharts && typeof s.paneCharts === 'object') paneCharts = s.paneCharts;
+    if (s.priceAlerts && typeof s.priceAlerts === 'object') priceAlerts = s.priceAlerts;
     if (Array.isArray(s.quadSlots)) {
       quadSlots = s.quadSlots.slice(0, 4).map(x => (x && watchlist.has(x)) ? x : null);
       while (quadSlots.length < 4) quadSlots.push(null);
@@ -321,9 +348,12 @@ function computeAnalytics(d) {
   if (!rows.length) return null;
 
   let totCall = 0, totPut = 0, resistance = null, support = null, maxCallOI = -1, maxPutOI = -1;
+  let totCallChg = 0, totPutChg = 0;
   rows.forEach(r => {
     const coi = r.call?.oi || 0, poi = r.put?.oi || 0;
     totCall += coi; totPut += poi;
+    totCallChg += (r.call?.oi_chg || 0);
+    totPutChg += (r.put?.oi_chg || 0);
     if (coi > maxCallOI) { maxCallOI = coi; resistance = r.strike; }  // most Call OI = resistance
     if (poi > maxPutOI) { maxPutOI = poi; support = r.strike; }        // most Put OI = support
   });
@@ -351,8 +381,8 @@ function computeAnalytics(d) {
   const pcrFinal = (typeof d.pcr === 'number' && d.pcr) ? d.pcr : pcr;
   const maxPainFinal = (d.max_pain != null) ? d.max_pain : maxPain;
 
-  return { totCall, totPut, pcr: pcrFinal, maxPain: maxPainFinal, support, resistance,
-           straddle, atmStrike: atmR.strike };
+  return { totCall, totPut, totCallChg, totPutChg, pcr: pcrFinal, maxPain: maxPainFinal,
+           support, resistance, straddle, atmStrike: atmR.strike };
 }
 
 function analyticsStripHTML(a) {
@@ -369,8 +399,8 @@ function analyticsStripHTML(a) {
     ${chip('Max Pain', a.maxPain, 'expiry magnet', 'text-indigo-400')}
     ${chip('Support', a.support, 'max Put OI', 'text-emerald-400')}
     ${chip('Resistance', a.resistance, 'max Call OI', 'text-rose-400')}
-    ${chip('Call OI', fmtOI(a.totCall), 'total', 'text-slate-300')}
-    ${chip('Put OI', fmtOI(a.totPut), 'total', 'text-slate-300')}
+    ${chip('Call OI', fmtOI(a.totCall), a.totCallChg ? (a.totCallChg > 0 ? '▲ +' : '▼ ') + fmtOI(a.totCallChg) : 'total', a.totCallChg > 0 ? 'text-emerald-400' : a.totCallChg < 0 ? 'text-rose-400' : 'text-slate-300')}
+    ${chip('Put OI', fmtOI(a.totPut), a.totPutChg ? (a.totPutChg > 0 ? '▲ +' : '▼ ') + fmtOI(a.totPutChg) : 'total', a.totPutChg > 0 ? 'text-emerald-400' : a.totPutChg < 0 ? 'text-rose-400' : 'text-slate-300')}
     ${chip('ATM Straddle', fmt(a.straddle), '@' + a.atmStrike, 'text-amber-400')}
   </div>`;
 }
@@ -385,6 +415,8 @@ function analyticsLineHTML(a) {
     <span class="text-slate-500">S <b class="text-emerald-400">${a.support}</b></span>
     <span class="text-slate-500">R <b class="text-rose-400">${a.resistance}</b></span>
     <span class="text-slate-500">Strad <b class="text-amber-400">${fmt(a.straddle)}</b></span>
+    ${a.totCallChg ? `<span class="text-slate-500">CΔ <b class="${a.totCallChg > 0 ? 'text-emerald-400' : 'text-rose-400'}">${a.totCallChg > 0 ? '+' : ''}${fmtOI(a.totCallChg)}</b></span>` : ''}
+    ${a.totPutChg ? `<span class="text-slate-500">PΔ <b class="${a.totPutChg > 0 ? 'text-emerald-400' : 'text-rose-400'}">${a.totPutChg > 0 ? '+' : ''}${fmtOI(a.totPutChg)}</b></span>` : ''}
   </div>`;
 }
 
@@ -523,6 +555,7 @@ async function fetchChain(sym, expiry) {
 
 // Push fresh data into the cards plus whichever chain view is active.
 function onDataUpdated(sym) {
+  checkAlerts(sym);
   renderCards();
   if (viewMode === 'single') {
     if (selectedSymbol === sym) renderDetail();
@@ -769,7 +802,9 @@ function updateCard(el, sym, d) {
       ? `<div class="flex gap-2 mt-2 text-[10px] text-slate-500">` +
         `<span title="Max Call OI">C: ${fmtOI(maxCallOI)}</span>` +
         `<span title="Max Put OI">P: ${fmtOI(maxPutOI)}</span>` +
-        `<span title="Total strikes">${d.rows.length} stk</span></div>`
+        `<span title="Total strikes">${d.rows.length} stk</span>` +
+        (priceAlerts[sym] ? `<span class="text-amber-400" title="Alert active">&#128276;</span>` : '') +
+        `</div>`
       : '');
 }
 
@@ -1074,11 +1109,11 @@ function quadChainTable(d) {
     const callBg = callITM ? 'bg-emerald-950/30' : '', putBg = putITM ? 'bg-rose-950/30' : '';
     const rowBorder = isATM ? 'border-y border-indigo-500/40' : 'border-b border-slate-800/50';
     return `<tr class="${rowBorder}" ${isATM ? 'data-atm="1"' : ''}>
-      <td class="py-1.5 px-2 text-right tabular-nums ${callBg} text-slate-500">${fmtOI(c.oi)}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums ${callBg} text-slate-500">${fmtOI(c.oi)}${c.oi_chg ? `<span class="text-[8px] ${c.oi_chg > 0 ? 'text-emerald-500' : 'text-rose-500'}">${c.oi_chg > 0 ? '▲' : '▼'}</span>` : ''}</td>
       <td class="py-1.5 px-2 text-right tabular-nums font-semibold ${callBg} ${callITM ? 'text-emerald-400' : 'text-slate-400'}">${fmt(c.ltp)}</td>
       <td class="py-1.5 px-2 text-center font-bold tabular-nums bg-slate-950/50 border-x border-slate-700/50 ${isATM ? 'text-indigo-400' : 'text-slate-300'}">${r.strike}</td>
       <td class="py-1.5 px-2 text-left tabular-nums font-semibold ${putBg} ${putITM ? 'text-rose-400' : 'text-slate-400'}">${fmt(p.ltp)}</td>
-      <td class="py-1.5 px-2 text-left tabular-nums ${putBg} text-slate-500">${fmtOI(p.oi)}</td>
+      <td class="py-1.5 px-2 text-left tabular-nums ${putBg} text-slate-500">${fmtOI(p.oi)}${p.oi_chg ? `<span class="text-[8px] ${p.oi_chg > 0 ? 'text-emerald-500' : 'text-rose-500'}">${p.oi_chg > 0 ? '▲' : '▼'}</span>` : ''}</td>
     </tr>`;
   }).join('');
 
@@ -1138,6 +1173,10 @@ function renderDetail() {
   gapBtn.textContent = gapMode ? (gap ? `Gap: ${gap}` : 'Gap: auto') : 'All strikes';
   gapBtn.className = 'bg-slate-800 border border-slate-700 hover:border-indigo-500 text-sm px-3 py-2 rounded-lg font-medium transition ' +
     (gapMode ? 'text-indigo-400' : 'text-slate-400');
+
+  // Alert button state
+  updateAlertBtn();
+  updateAlertStatus();
 
   // Table vs Graph
   const scroll = document.getElementById('chainScroll');
@@ -1233,6 +1272,7 @@ function aggregateCandles(raw, mins) {
       Math.max(...chunk.map(c => c[2])),
       Math.min(...chunk.map(c => c[3])),
       chunk[chunk.length - 1][4],
+      chunk.reduce((s, c) => s + (c[5] || 0), 0),
     ]);
   }
   return out;
@@ -1247,34 +1287,43 @@ function renderStockGraph(sym, d) {
   }
 
   const isDaily = e.interval === 'day';
-  // Aggregate intraday into 5-min candles so they're readable; daily stays as-is.
   const candles = isDaily ? raw : aggregateCandles(raw, 5);
   const n = candles.length;
 
-  const W = 640, H = 260, P = { t: 14, r: 62, b: 24, l: 10 };
+  const GREEN = '#34d399', RED = '#fb7185';
+  const W = 640, VOL_H = 48, GAP = 6, P = { t: 14, r: 62, b: 24, l: 10 };
+  const hasVol = candles.some(c => (c[5] || 0) > 0);
+  const totalVolH = hasVol ? VOL_H + GAP : 0;
+  const H = 260 + totalVolH;
+  const iw = W - P.l - P.r;
+  const ih = H - P.t - P.b - totalVolH;
+
   const allHi = candles.map(c => c[2]), allLo = candles.map(c => c[3]);
   const lo = Math.min(...allLo), hi = Math.max(...allHi);
   const span = (hi - lo) || 1;
-  const iw = W - P.l - P.r, ih = H - P.t - P.b;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
 
-  const GREEN = '#34d399', RED = '#fb7185';
-  const cw = Math.max(1, Math.min(6, (iw / n) * 0.7));   // body width
+  const cw = Math.max(1, Math.min(6, (iw / n) * 0.7));
   const gap = iw / n;
 
-  // Draw each candlestick: wick (high-low line) + body (open-close rect)
-  let sticks = '';
+  // Volume scale
+  const maxVol = hasVol ? Math.max(...candles.map(c => c[5] || 0)) || 1 : 1;
+  const volBase = P.t + ih + GAP + VOL_H;
+
+  let sticks = '', volBars = '';
   for (let i = 0; i < n; i++) {
-    const [ts, o, h, l, c] = candles[i];
+    const [ts, o, h, l, c, vol] = candles[i];
     const cx = P.l + (i + 0.5) * gap;
     const up = c >= o;
     const col = up ? GREEN : RED;
     const bodyTop = y(Math.max(o, c)), bodyBot = y(Math.min(o, c));
     const bodyH = Math.max(1, bodyBot - bodyTop);
-    // Wick
     sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`;
-    // Body
-    sticks += `<rect x="${(cx - cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${up ? col : col}" rx="0.3" stroke="${col}" stroke-width="0.3"/>`;
+    sticks += `<rect x="${(cx - cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}" rx="0.3" stroke="${col}" stroke-width="0.3"/>`;
+    if (hasVol && vol > 0) {
+      const vH = (vol / maxVol) * VOL_H;
+      volBars += `<rect x="${(cx - cw/2).toFixed(1)}" y="${(volBase - vH).toFixed(1)}" width="${cw.toFixed(1)}" height="${vH.toFixed(1)}" fill="${col}" opacity="0.35" rx="0.3"/>`;
+    }
   }
 
   const first = candles[0][1], last = candles[n-1][4];
@@ -1287,16 +1336,23 @@ function renderStockGraph(sym, d) {
     : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
   const mid = Math.floor((n - 1) / 2);
 
+  const fmtVol = v => { if (v >= 1e7) return (v/1e7).toFixed(1)+'Cr'; if (v >= 1e5) return (v/1e5).toFixed(1)+'L'; if (v >= 1e3) return (v/1e3).toFixed(0)+'K'; return String(Math.round(v)); };
+
   return `<div class="p-3">
     <div class="flex justify-between items-baseline mb-1 px-1">
       <span class="text-[10px] uppercase tracking-wider text-slate-500">${isDaily ? 'Daily (45d)' : 'Intraday (5m)'} &middot; ${sym}</span>
       <span class="text-xs font-bold tabular-nums" style="color:${dayCol}">${fmt(last)} <span class="font-medium">(${dayUp ? '+' : ''}${(((last - first) / first) * 100).toFixed(2)}%)</span></span>
     </div>
-    <svg viewBox="0 0 ${W} ${H}" class="w-full" style="min-height:180px">
+    <svg viewBox="0 0 ${W} ${H}" class="w-full" style="min-height:${hasVol ? 220 : 180}px">
       ${grid.map(v => `
         <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1e293b" stroke-dasharray="3,4"/>
         <text x="${W - P.r + 6}" y="${(y(v) + 3.5).toFixed(1)}" fill="#64748b" font-size="10" font-family="inherit">${fmt(v)}</text>`).join('')}
       ${sticks}
+      ${hasVol ? `
+        <line x1="${P.l}" y1="${(P.t + ih + GAP).toFixed(1)}" x2="${W - P.r}" y2="${(P.t + ih + GAP).toFixed(1)}" stroke="#1e293b" stroke-width="0.5"/>
+        <text x="${W - P.r + 6}" y="${(P.t + ih + GAP + 10).toFixed(1)}" fill="#475569" font-size="9" font-family="inherit">${fmtVol(maxVol)}</text>
+        <text x="${W - P.r + 6}" y="${volBase.toFixed(1)}" fill="#475569" font-size="9" font-family="inherit">Vol</text>
+        ${volBars}` : ''}
       <text x="${P.l}" y="${H - 8}" fill="#64748b" font-size="10">${lbl(candles[0][0])}</text>
       <text x="${(P.l + iw / 2).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="middle">${lbl(candles[mid][0])}</text>
       <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="end">${lbl(candles[n-1][0])}</text>
@@ -1445,6 +1501,91 @@ function selectCategory(cat) {
 
 function highlightChip(sym) { renderCategories(); }
 function unhighlightChip(sym) { renderCategories(); }
+
+// ========================= PRICE ALERTS =========================
+function toggleAlertPanel() {
+  const panel = document.getElementById('alertPanel');
+  const isHidden = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  if (isHidden && selectedSymbol) {
+    const a = priceAlerts[selectedSymbol] || {};
+    document.getElementById('alertAbove').value = a.above || '';
+    document.getElementById('alertBelow').value = a.below || '';
+    updateAlertStatus();
+  }
+}
+
+function saveAlert() {
+  if (!selectedSymbol) return;
+  const above = parseFloat(document.getElementById('alertAbove').value) || null;
+  const below = parseFloat(document.getElementById('alertBelow').value) || null;
+  if (!above && !below) { clearAlert(); return; }
+  priceAlerts[selectedSymbol] = { above, below, aboveFired: false, belowFired: false };
+  saveState();
+  renderCards();
+  updateAlertBtn();
+  updateAlertStatus();
+  toast(`Alert set for ${selectedSymbol}`, 'success');
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function clearAlert() {
+  if (!selectedSymbol) return;
+  delete priceAlerts[selectedSymbol];
+  document.getElementById('alertAbove').value = '';
+  document.getElementById('alertBelow').value = '';
+  saveState();
+  renderCards();
+  updateAlertBtn();
+  updateAlertStatus();
+  toast(`Alert cleared for ${selectedSymbol}`, 'info');
+}
+
+function checkAlerts(sym) {
+  const alert = priceAlerts[sym];
+  if (!alert) return;
+  const d = watchlist.get(sym);
+  if (!d || !d.spot) return;
+
+  if (alert.above && d.spot >= alert.above && !alert.aboveFired) {
+    alert.aboveFired = true;
+    fireAlert(sym, 'above', alert.above, d.spot);
+  }
+  if (alert.below && d.spot <= alert.below && !alert.belowFired) {
+    alert.belowFired = true;
+    fireAlert(sym, 'below', alert.below, d.spot);
+  }
+}
+
+function fireAlert(sym, dir, target, current) {
+  const arrow = dir === 'above' ? '↑' : '↓';
+  const msg = `${sym} ${arrow} ${fmt(current)} crossed ${dir} ${fmt(target)}`;
+  toast(msg, 'warn');
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(`Price Alert: ${sym}`, { body: msg });
+  }
+}
+
+function updateAlertBtn() {
+  const btn = document.getElementById('alertToggleBtn');
+  if (!btn) return;
+  const hasAlert = selectedSymbol && priceAlerts[selectedSymbol];
+  btn.className = 'bg-slate-800 border text-sm px-3 py-2 rounded-lg font-medium transition ' +
+    (hasAlert ? 'border-amber-500 text-amber-400' : 'border-slate-700 hover:border-amber-500 text-slate-300');
+}
+
+function updateAlertStatus() {
+  const el = document.getElementById('alertStatus');
+  if (!el || !selectedSymbol) return;
+  const a = priceAlerts[selectedSymbol];
+  if (!a) { el.textContent = 'No alert set'; return; }
+  const parts = [];
+  if (a.above) parts.push(`Above ${fmt(a.above)}${a.aboveFired ? ' ✓' : ''}`);
+  if (a.below) parts.push(`Below ${fmt(a.below)}${a.belowFired ? ' ✓' : ''}`);
+  el.textContent = parts.join(' · ');
+}
 
 // ========================= SEARCH INPUT =========================
 document.getElementById('searchInput').addEventListener('keydown', e => {

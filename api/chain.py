@@ -626,7 +626,7 @@ def get_candles(symbol):
         candles = data.get("candles") or []
 
     # Upstox returns newest-first: [ts, open, high, low, close, volume, oi]
-    candles = [[c[0], c[1], c[2], c[3], c[4]] for c in reversed(candles)]
+    candles = [[c[0], c[1], c[2], c[3], c[4], c[5] if len(c) > 5 else 0] for c in reversed(candles)]
     return {"type": "candles", "symbol": symbol, "interval": interval, "candles": candles}
 
 
