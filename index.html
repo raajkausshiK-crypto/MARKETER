@@ -18,63 +18,118 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    @keyframes flashGreen { 0% { background-color: rgba(34,197,94,.35); } 100% { background-color: transparent; } }
-    @keyframes flashRed   { 0% { background-color: rgba(239,68,68,.35); } 100% { background-color: transparent; } }
+    body { background: linear-gradient(180deg, #020617 0%, #0a0f1e 40%, #0f172a 100%); min-height: 100vh; }
+
+    /* Animations */
+    @keyframes flashGreen { 0% { background-color: rgba(34,197,94,.25); } 100% { background-color: transparent; } }
+    @keyframes flashRed   { 0% { background-color: rgba(239,68,68,.25); } 100% { background-color: transparent; } }
     .flash-up   { animation: flashGreen .5s ease-out; }
     .flash-down { animation: flashRed   .5s ease-out; }
-    @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:.3;} }
-    .dot-pulse { animation: pulse-dot 1.4s infinite; }
-    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
-    .fade-in { animation: fadeIn .25s ease-out; }
-    .card-glow:hover { box-shadow: 0 0 0 2px rgba(99,102,241,.5); }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #1e293b; }
-    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:.25;} }
+    .dot-pulse { animation: pulse-dot 1.6s ease-in-out infinite; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .fade-in { animation: fadeIn .3s cubic-bezier(.4,0,.2,1); }
+    @keyframes liveGlow { 0%,100% { box-shadow:0 0 0 0 rgba(52,211,153,.5); } 50% { box-shadow:0 0 0 5px rgba(52,211,153,0); } }
+    .live-glow { animation: liveGlow 2s ease-in-out infinite; }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+    /* Glass panels */
+    .glass { background: rgba(15,23,42,.65); backdrop-filter: blur(16px) saturate(1.4); border: 1px solid rgba(51,65,85,.45); }
+    .glass-strong { background: rgba(15,23,42,.85); backdrop-filter: blur(20px) saturate(1.5); border: 1px solid rgba(51,65,85,.55); }
+
+    /* Card system */
+    .card-elevated {
+      box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.03);
+      transition: all .25s cubic-bezier(.4,0,.2,1);
+    }
+    .card-elevated:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,.4), 0 12px 28px rgba(0,0,0,.18), 0 0 0 1px rgba(99,102,241,.35);
+      transform: translateY(-2px);
+    }
+
+    /* Accent gradient */
+    .accent-grad { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #6366f1 100%); background-size: 200% 200%; }
+    .accent-grad:hover { background-position: 100% 100%; }
+    .accent-line { height: 2px; background: linear-gradient(90deg, transparent, #6366f1, #8b5cf6, #6366f1, transparent); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(71,85,105,.4); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.6); }
+
+    /* Table */
+    .chain-row { transition: background .12s ease; }
+    .chain-row:hover { background: rgba(30,41,59,.5) !important; }
+
+    /* Pill button */
+    .pill { border-radius: 9999px; font-weight: 500; transition: all .2s ease; }
+    .pill:hover { transform: scale(1.03); }
+    .pill-active { background: linear-gradient(135deg, rgba(99,102,241,.2), rgba(139,92,246,.15)); border-color: rgba(99,102,241,.5); color: #a5b4fc; box-shadow: 0 0 12px rgba(99,102,241,.12); }
+
+    /* Stat chip */
+    .stat-chip { background: rgba(15,23,42,.5); border: 1px solid rgba(51,65,85,.35); border-radius: .625rem; padding: .5rem .75rem; backdrop-filter: blur(8px); }
+
+    /* Toast */
+    .toast-pop { backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.06); box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+
+    /* Selection */
+    ::selection { background: rgba(99,102,241,.3); }
+
+    /* Input focus ring */
+    .input-ring { transition: all .2s ease; }
+    .input-ring:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); outline: none; }
   </style>
 </head>
-<body class="dark bg-slate-950 text-slate-200 min-h-screen font-sans">
+<body class="dark text-slate-200 min-h-screen font-sans antialiased">
 
-<div id="app" class="max-w-7xl mx-auto px-4 py-5">
+<div id="app" class="max-w-7xl mx-auto px-4 sm:px-6 py-5">
 
   <!-- ===== TOP BAR ===== -->
-  <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-    <div>
-      <h1 class="text-2xl font-extrabold text-white tracking-tight">Market Screener</h1>
-      <p class="text-xs text-slate-500 mt-0.5">Real-time NSE options chain &middot; monitor multiple stocks</p>
-    </div>
+  <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
     <div class="flex items-center gap-3">
-      <div class="flex items-center gap-2 text-sm">
-        <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
-        <span id="statusText" class="text-slate-500 text-xs">Offline</span>
+      <div class="w-9 h-9 rounded-xl accent-grad flex items-center justify-center shadow-lg shadow-indigo-500/20">
+        <span class="text-white text-lg font-bold">M</span>
+      </div>
+      <div>
+        <h1 class="text-xl font-extrabold text-white tracking-tight">Market Screener</h1>
+        <p class="text-[11px] text-slate-500 mt-0.5 tracking-wide">Real-time NSE options chain &middot; monitor multiple stocks</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2.5">
+      <div class="flex items-center gap-2 bg-slate-900/60 border border-slate-800/60 rounded-lg px-3 py-1.5">
+        <span id="statusDot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+        <span id="statusText" class="text-slate-500 text-[11px] font-medium">Offline</span>
       </div>
       <button id="restartBtn" onclick="restartConnection()" title="Restart live feed"
-        class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-semibold w-9 h-9 flex items-center justify-center rounded-lg border border-slate-700 shadow transition">
+        class="glass text-slate-400 hover:text-white text-sm font-semibold w-9 h-9 flex items-center justify-center rounded-xl shadow transition hover:border-slate-600">
         &#8635;
       </button>
       <button id="connectBtn" onclick="toggleConnection()"
-        class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow transition">
+        class="accent-grad text-white text-sm font-semibold px-5 py-2 rounded-xl shadow-lg shadow-indigo-500/25 transition hover:shadow-indigo-500/40">
         Start Live Data
       </button>
     </div>
   </header>
+  <div class="accent-line mb-5 rounded-full opacity-60"></div>
 
   <!-- ===== RATE-LIMIT BANNER ===== -->
-  <div id="rateBanner" class="hidden mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 text-sm px-4 py-2.5 flex items-center gap-2">
+  <div id="rateBanner" class="hidden mb-4 rounded-xl border border-amber-500/30 bg-amber-500/8 text-amber-300 text-sm px-4 py-2.5 flex items-center gap-2 backdrop-blur-sm">
     <span class="w-2 h-2 rounded-full bg-amber-400 dot-pulse"></span>
     <span id="rateBannerText">Upstox rate limit hit — pausing requests to recover…</span>
   </div>
 
   <!-- ===== ADD STOCKS BAR ===== -->
-  <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-5">
+  <section class="glass-strong rounded-2xl p-4 mb-5">
     <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
       <div class="flex-1 w-full">
-        <label class="block text-[11px] uppercase tracking-wider text-slate-500 mb-1.5 font-medium">Add Stock / Index</label>
+        <label class="block text-[10px] uppercase tracking-[.1em] text-slate-500 mb-1.5 font-semibold">Add Stock / Index</label>
         <div class="flex gap-2">
           <input id="searchInput" type="text" placeholder="Type symbol e.g. RELIANCE, NIFTY..."
-            class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm uppercase
-                   focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition placeholder:text-slate-600">
+            class="flex-1 bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-2.5 text-sm uppercase
+                   input-ring transition placeholder:text-slate-600/80">
           <button onclick="addWatchlistItem()"
-            class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow transition whitespace-nowrap">
+            class="accent-grad text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 transition whitespace-nowrap hover:shadow-indigo-500/35">
             + Add
           </button>
         </div>
@@ -83,7 +138,7 @@
     <!-- Category tabs + stock chips -->
     <div class="mt-3">
       <div id="catTabs" class="flex flex-wrap gap-1.5 mb-2"></div>
-      <div id="catStocks" class="flex flex-wrap gap-1.5 max-h-[160px] overflow-y-auto"></div>
+      <div id="catStocks" class="flex flex-wrap gap-1.5 max-h-[160px] overflow-y-auto pr-1"></div>
     </div>
   </section>
 
@@ -95,74 +150,72 @@
   </section>
 
   <!-- ===== VIEW TOGGLE (Single / Quad / Screener) ===== -->
-  <div id="viewToolbar" class="hidden items-center justify-between mb-3">
-    <div class="text-xs uppercase tracking-wider text-slate-500 font-medium">
+  <div id="viewToolbar" class="hidden items-center justify-between mb-4">
+    <div class="text-[11px] uppercase tracking-[.08em] text-slate-500 font-semibold">
       <span id="viewToolbarTitle">Option Chains</span>
-      <span id="stockCount" class="ml-2 text-slate-600 normal-case"></span>
+      <span id="stockCount" class="ml-2 text-slate-600 normal-case font-normal"></span>
     </div>
-    <div class="inline-flex bg-slate-800 border border-slate-700 rounded-lg p-1 gap-1">
+    <div class="inline-flex glass rounded-xl p-1 gap-0.5">
       <button id="viewSingleBtn" onclick="setViewMode('single')"
-        class="text-xs font-semibold px-3 py-1.5 rounded-md transition">Single</button>
+        class="text-[11px] font-semibold px-3.5 py-1.5 rounded-lg transition">Single</button>
       <button id="viewQuadBtn" onclick="setViewMode('quad')"
-        class="text-xs font-semibold px-3 py-1.5 rounded-md transition">Quad &middot; 4</button>
+        class="text-[11px] font-semibold px-3.5 py-1.5 rounded-lg transition">Quad &middot; 4</button>
       <button id="viewScreenerBtn" onclick="setViewMode('screener')"
-        class="text-xs font-semibold px-3 py-1.5 rounded-md transition">Screener</button>
+        class="text-[11px] font-semibold px-3.5 py-1.5 rounded-lg transition">Screener</button>
     </div>
   </div>
 
   <!-- ===== SCREENER (grid of live option-chain panes, like quad but for all) ===== -->
   <section id="screenerPanel" class="hidden fade-in mb-6">
     <div id="screenerGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-      <!-- one chain pane per watched stock, injected -->
     </div>
   </section>
 
   <!-- ===== QUAD (2x2) MULTI-CHAIN VIEW ===== -->
   <section id="quadPanel" class="hidden fade-in mb-6">
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <!-- 4 chain panels injected -->
     </div>
   </section>
 
   <!-- ===== SELECTED STOCK DETAIL ===== -->
   <section id="detailPanel" class="hidden fade-in">
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div class="glass-strong rounded-2xl overflow-hidden shadow-xl shadow-black/20">
       <!-- Detail Header -->
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b border-slate-800">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b border-slate-800/60">
         <div class="flex items-center gap-4">
           <div>
-            <div class="text-[11px] uppercase tracking-wider text-slate-500">Option Chain</div>
+            <div class="text-[10px] uppercase tracking-[.1em] text-slate-500 font-semibold">Option Chain</div>
             <div class="flex items-baseline gap-3">
-              <span id="detailSymbol" class="text-2xl font-bold text-white">—</span>
-              <span id="detailSpot" class="text-lg font-semibold text-slate-300 tabular-nums">—</span>
+              <span id="detailSymbol" class="text-2xl font-extrabold text-white">—</span>
+              <span id="detailSpot" class="text-lg font-bold text-slate-300 tabular-nums">—</span>
               <span id="detailChange" class="text-sm font-medium px-2 py-0.5 rounded hidden">—</span>
             </div>
           </div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <button id="gapToggleBtn" onclick="toggleGap()" title="Filter strikes to a price-based gap"
-            class="bg-slate-800 border border-slate-700 hover:border-indigo-500 text-sm px-3 py-2 rounded-lg font-medium transition text-indigo-400">
+            class="glass text-sm px-3 py-2 rounded-xl font-medium transition text-indigo-400 hover:border-indigo-500/50">
             Gap: auto
           </button>
           <button id="graphToggleBtn" onclick="toggleGraph()" title="Toggle OI graph view"
-            class="bg-slate-800 border border-slate-700 hover:border-indigo-500 text-sm px-3 py-2 rounded-lg font-medium transition text-slate-300">
+            class="glass text-sm px-3 py-2 rounded-xl font-medium transition text-slate-300 hover:border-indigo-500/50">
             &#128202; Graph
           </button>
           <button id="alertToggleBtn" onclick="toggleAlertPanel()" title="Set price alert"
-            class="bg-slate-800 border border-slate-700 hover:border-amber-500 text-sm px-3 py-2 rounded-lg font-medium transition text-slate-300">
+            class="glass text-sm px-3 py-2 rounded-xl font-medium transition text-slate-300 hover:border-amber-500/50">
             &#128276; Alert
           </button>
           <select id="expirySelect" onchange="changeExpiry()"
-            class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition">
+            class="glass rounded-xl px-3 py-2 text-sm input-ring transition">
             <option value="">Expiry</option>
           </select>
           <div class="flex gap-1.5">
             <input id="customStrikeInput" type="number" placeholder="Strike..."
-              class="w-28 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition">
+              class="w-28 bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-sm input-ring transition">
             <button onclick="addCustomStrike()"
-              class="bg-slate-700 hover:bg-slate-600 text-sm px-3 py-2 rounded-lg font-medium transition">Add</button>
+              class="glass text-sm px-3 py-2 rounded-xl font-medium transition hover:text-white">Add</button>
             <button onclick="resetCustomStrikes()"
-              class="text-rose-400 hover:bg-rose-500/10 text-sm px-3 py-2 rounded-lg font-medium transition border border-transparent hover:border-rose-500/30">Reset</button>
+              class="text-rose-400 hover:bg-rose-500/10 text-sm px-3 py-2 rounded-xl font-medium transition border border-transparent hover:border-rose-500/30">Reset</button>
           </div>
         </div>
       </div>
@@ -171,48 +224,48 @@
       <div id="detailAnalytics" class="hidden"></div>
 
       <!-- Price Alert Panel -->
-      <div id="alertPanel" class="hidden border-b border-slate-800 bg-amber-500/5 px-4 py-2.5">
+      <div id="alertPanel" class="hidden border-b border-slate-800/50 bg-amber-500/5 px-4 py-2.5">
         <div class="flex items-center gap-3 flex-wrap text-xs">
           <span class="text-amber-400 font-semibold">&#128276; Price Alert</span>
           <div class="flex items-center gap-1.5">
             <label class="text-slate-500">Above:</label>
             <input id="alertAbove" type="number" step="any"
-              class="w-28 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 tabular-nums" placeholder="e.g. 25000">
+              class="w-28 bg-slate-800/50 border border-slate-700/50 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 input-ring tabular-nums" placeholder="e.g. 25000">
           </div>
           <div class="flex items-center gap-1.5">
             <label class="text-slate-500">Below:</label>
             <input id="alertBelow" type="number" step="any"
-              class="w-28 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 tabular-nums" placeholder="e.g. 24000">
+              class="w-28 bg-slate-800/50 border border-slate-700/50 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 input-ring tabular-nums" placeholder="e.g. 24000">
           </div>
-          <button onclick="saveAlert()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-md text-xs font-semibold transition">Set Alert</button>
-          <button onclick="clearAlert()" class="text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-500 px-3 py-1.5 rounded-md text-xs font-medium transition">Clear</button>
-          <span id="alertStatus" class="text-[10px] text-slate-600 ml-auto"></span>
+          <button onclick="saveAlert()" class="bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm">Set Alert</button>
+          <button onclick="clearAlert()" class="text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/50 px-3 py-1.5 rounded-lg text-xs font-medium transition">Clear</button>
+          <span id="alertStatus" class="text-[10px] text-slate-600 ml-auto tabular-nums"></span>
         </div>
       </div>
 
-      <!-- Chain Table (internally scrollable so the full chain stays usable) -->
+      <!-- Chain Table -->
       <div id="chainScroll" class="overflow-auto" style="max-height:70vh;">
         <table class="w-full text-sm">
           <thead class="sticky top-0 z-10">
-            <tr class="bg-slate-950/90 backdrop-blur text-[11px] uppercase tracking-wider">
-              <th colspan="6" class="py-2.5 text-center text-emerald-400 font-semibold border-b border-slate-800">Calls</th>
-              <th class="py-2.5 text-center text-slate-400 font-semibold border-b border-slate-800 border-x border-slate-700 bg-slate-950/80">Strike</th>
-              <th colspan="6" class="py-2.5 text-center text-rose-400 font-semibold border-b border-slate-800">Puts</th>
+            <tr class="bg-slate-950/95 backdrop-blur-sm text-[10px] uppercase tracking-[.08em]">
+              <th colspan="6" class="py-2.5 text-center text-emerald-400 font-semibold border-b border-slate-800/60">Calls</th>
+              <th class="py-2.5 text-center text-slate-400 font-semibold border-b border-slate-800/60 border-x border-slate-700/40 bg-slate-950/80">Strike</th>
+              <th colspan="6" class="py-2.5 text-center text-rose-400 font-semibold border-b border-slate-800/60">Puts</th>
             </tr>
-            <tr class="bg-slate-950 text-[10px] uppercase tracking-wider text-slate-600">
-              <th class="py-2 px-2 text-left font-medium">Status</th>
-              <th class="py-2 px-2 text-right font-medium">OI (Chg)</th>
-              <th class="py-2 px-2 text-right font-medium">IV</th>
-              <th class="py-2 px-2 text-right font-medium">Δ</th>
-              <th class="py-2 px-2 text-right font-medium">Bid/Ask</th>
-              <th class="py-2 px-2 text-right font-medium text-emerald-500">LTP</th>
-              <th class="py-2 px-2 text-center font-medium border-x border-slate-700 bg-slate-950/80">Price</th>
-              <th class="py-2 px-2 text-left font-medium text-rose-500">LTP</th>
-              <th class="py-2 px-2 text-left font-medium">Bid/Ask</th>
-              <th class="py-2 px-2 text-left font-medium">Δ</th>
-              <th class="py-2 px-2 text-left font-medium">IV</th>
-              <th class="py-2 px-2 text-left font-medium">OI (Chg)</th>
-              <th class="py-2 px-2 text-right font-medium">Status</th>
+            <tr class="bg-slate-950/95 text-[9px] uppercase tracking-[.1em] text-slate-500">
+              <th class="py-2 px-2 text-left font-semibold">Status</th>
+              <th class="py-2 px-2 text-right font-semibold">OI (Chg)</th>
+              <th class="py-2 px-2 text-right font-semibold">IV</th>
+              <th class="py-2 px-2 text-right font-semibold">Δ</th>
+              <th class="py-2 px-2 text-right font-semibold">Bid/Ask</th>
+              <th class="py-2 px-2 text-right font-semibold text-emerald-500/80">LTP</th>
+              <th class="py-2 px-2 text-center font-semibold border-x border-slate-700/40 bg-slate-950/80">Price</th>
+              <th class="py-2 px-2 text-left font-semibold text-rose-500/80">LTP</th>
+              <th class="py-2 px-2 text-left font-semibold">Bid/Ask</th>
+              <th class="py-2 px-2 text-left font-semibold">Δ</th>
+              <th class="py-2 px-2 text-left font-semibold">IV</th>
+              <th class="py-2 px-2 text-left font-semibold">OI (Chg)</th>
+              <th class="py-2 px-2 text-right font-semibold">Status</th>
             </tr>
           </thead>
           <tbody id="chainBody"></tbody>
@@ -228,10 +281,12 @@
   </section>
 
   <!-- ===== EMPTY STATE ===== -->
-  <section id="emptyState" class="text-center py-16">
-    <div class="text-slate-700 text-6xl mb-4">&#9881;</div>
-    <p class="text-slate-500 text-sm">Add stocks above to start monitoring</p>
-    <p class="text-slate-600 text-xs mt-1">Pick a category above and click any stock, or type a symbol</p>
+  <section id="emptyState" class="text-center py-20">
+    <div class="inline-flex w-16 h-16 rounded-2xl accent-grad items-center justify-center shadow-lg shadow-indigo-500/20 mb-5 opacity-60">
+      <span class="text-3xl">&#128200;</span>
+    </div>
+    <p class="text-slate-400 text-sm font-medium">Add stocks above to start monitoring</p>
+    <p class="text-slate-600 text-xs mt-1.5">Pick a category and click any stock, or type a symbol</p>
   </section>
 </div>
 
@@ -388,13 +443,13 @@ function computeAnalytics(d) {
 function analyticsStripHTML(a) {
   if (!a) return '';
   const chip = (label, val, sub, color) =>
-    `<div class="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/40 min-w-[76px]">
-       <div class="text-[9px] uppercase tracking-wider text-slate-500">${label}</div>
+    `<div class="stat-chip min-w-[76px]">
+       <div class="text-[9px] uppercase tracking-[.08em] text-slate-500 font-semibold">${label}</div>
        <div class="text-sm font-bold tabular-nums ${color || 'text-slate-200'}">${val}</div>
-       ${sub ? `<div class="text-[9px] text-slate-500">${sub}</div>` : ''}
+       ${sub ? `<div class="text-[9px] text-slate-500 tabular-nums">${sub}</div>` : ''}
      </div>`;
   const pcrColor = a.pcr >= 1 ? 'text-emerald-400' : 'text-rose-400';
-  return `<div class="flex flex-wrap gap-2 p-3 border-b border-slate-800 bg-slate-950/30">
+  return `<div class="flex flex-wrap gap-2 p-3 border-b border-slate-800/50 bg-slate-950/20">
     ${chip('PCR', a.pcr.toFixed(2), a.pcr >= 1 ? 'put-heavy' : 'call-heavy', pcrColor)}
     ${chip('Max Pain', a.maxPain, 'expiry magnet', 'text-indigo-400')}
     ${chip('Support', a.support, 'max Put OI', 'text-emerald-400')}
@@ -409,7 +464,7 @@ function analyticsStripHTML(a) {
 function analyticsLineHTML(a) {
   if (!a) return '';
   const pcrColor = a.pcr >= 1 ? 'text-emerald-400' : 'text-rose-400';
-  return `<div class="flex items-center flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-1.5 border-b border-slate-800 text-[10px] bg-slate-950/30">
+  return `<div class="flex items-center flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-1.5 border-b border-slate-800/50 text-[10px] bg-slate-950/20">
     <span class="text-slate-500">PCR <b class="${pcrColor}">${a.pcr.toFixed(2)}</b></span>
     <span class="text-slate-500">MaxPain <b class="text-indigo-400">${a.maxPain}</b></span>
     <span class="text-slate-500">S <b class="text-emerald-400">${a.support}</b></span>
@@ -423,8 +478,8 @@ function analyticsLineHTML(a) {
 // ========================= TOAST =========================
 function toast(msg, type='info') {
   const el = document.createElement('div');
-  const colors = { info:'bg-indigo-600', success:'bg-emerald-600', error:'bg-rose-600', warn:'bg-amber-600' };
-  el.className = `${colors[type]||colors.info} text-white text-sm px-4 py-2.5 rounded-lg shadow-lg fade-in`;
+  const colors = { info:'bg-indigo-600/90', success:'bg-emerald-600/90', error:'bg-rose-600/90', warn:'bg-amber-600/90' };
+  el.className = `${colors[type]||colors.info} text-white text-sm px-4 py-2.5 rounded-xl shadow-xl toast-pop fade-in font-medium`;
   el.textContent = msg;
   document.getElementById('toastArea').appendChild(el);
   setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3000);
@@ -682,13 +737,13 @@ function setConnStatus(kind) {
   const text = document.getElementById('statusText');
   const btn = document.getElementById('connectBtn');
   if (kind === 'live') {
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 dot-pulse';
-    text.textContent = 'Live'; text.className = 'text-emerald-400 text-xs';
-    btn.textContent = 'Disconnect'; btn.className = 'bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow transition';
+    dot.className = 'w-2 h-2 rounded-full bg-emerald-400 live-glow';
+    text.textContent = 'Live'; text.className = 'text-emerald-400 text-[11px] font-medium';
+    btn.textContent = 'Disconnect'; btn.className = 'bg-rose-600/90 hover:bg-rose-500 text-white text-sm font-semibold px-5 py-2 rounded-xl shadow-lg transition';
   } else {
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-600';
-    text.textContent = 'Offline'; text.className = 'text-slate-500 text-xs';
-    btn.textContent = 'Start Live Data'; btn.className = 'bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow transition';
+    dot.className = 'w-2 h-2 rounded-full bg-slate-600';
+    text.textContent = 'Offline'; text.className = 'text-slate-500 text-[11px] font-medium';
+    btn.textContent = 'Start Live Data'; btn.className = 'accent-grad text-white text-sm font-semibold px-5 py-2 rounded-xl shadow-lg shadow-indigo-500/25 transition hover:shadow-indigo-500/40';
   }
 }
 
@@ -755,12 +810,12 @@ function renderCards() {
     if (!el) {
       el = document.createElement('div');
       el.setAttribute('data-sym', sym);
-      el.className = 'relative bg-slate-900 border rounded-xl p-3.5 cursor-pointer transition-all card-glow fade-in border-slate-800 hover:border-slate-600';
+      el.className = 'relative glass rounded-2xl p-3.5 cursor-pointer card-elevated fade-in';
       el.onclick = () => selectSymbol(sym);
       el.innerHTML =
-        `<button class="absolute top-2 right-2 text-slate-600 hover:text-rose-400 text-xs transition" title="Remove">&#10005;</button>` +
-        `<div data-role="seg" class="text-xs text-slate-500 font-medium uppercase tracking-wider">F&amp;O</div>` +
-        `<div class="text-base font-bold text-white mt-0.5">${sym}</div>` +
+        `<button class="absolute top-2.5 right-2.5 text-slate-600 hover:text-rose-400 text-[10px] transition w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-500/10" title="Remove">&#10005;</button>` +
+        `<div data-role="seg" class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.1em]">F&amp;O</div>` +
+        `<div class="text-[15px] font-extrabold text-white mt-0.5 tracking-tight">${sym}</div>` +
         `<div data-role="body"></div>`;
       el.querySelector('button').onclick = (e) => removeWatchlistItem(sym, e);
       container.appendChild(el);
@@ -775,12 +830,14 @@ function renderCards() {
 // re-triggered animation and no flicker.
 function updateCard(el, sym, d) {
   const selected = sym === selectedSymbol;
-  el.classList.toggle('border-indigo-500', selected);
-  el.classList.toggle('ring-1', selected);
-  el.classList.toggle('ring-indigo-500/30', selected);
-  el.classList.toggle('border-slate-800', !selected);
-  el.classList.toggle('hover:border-slate-600', !selected);
-  el.classList.toggle('opacity-70', !connected && !d.loading);
+  if (selected) {
+    el.style.borderColor = 'rgba(99,102,241,.5)';
+    el.style.boxShadow = '0 0 0 1px rgba(99,102,241,.2), 0 4px 16px rgba(99,102,241,.1)';
+  } else {
+    el.style.borderColor = '';
+    el.style.boxShadow = '';
+  }
+  el.classList.toggle('opacity-60', !connected && !d.loading);
 
   el.querySelector('[data-role="seg"]').textContent = d.cashOnly ? 'CASH' : 'F&O';
 
@@ -823,9 +880,9 @@ function updateViewToolbar() {
       (loaded < watchlist.size ? ` · ${loaded}/${watchlist.size} chains loaded` : ' · all chains loaded')
     : '';
 
-  const active = ' bg-indigo-600 text-white';
-  const idle = ' text-slate-400 hover:text-white';
-  const base = 'text-xs font-semibold px-3 py-1.5 rounded-md transition';
+  const active = ' accent-grad text-white shadow-sm shadow-indigo-500/20';
+  const idle = ' text-slate-400 hover:text-white hover:bg-slate-800/50';
+  const base = 'text-[11px] font-semibold px-3.5 py-1.5 rounded-lg transition';
   document.getElementById('viewSingleBtn').className   = base + (viewMode === 'single'   ? active : idle);
   document.getElementById('viewQuadBtn').className     = base + (viewMode === 'quad'     ? active : idle);
   document.getElementById('viewScreenerBtn').className = base + (viewMode === 'screener' ? active : idle);
@@ -876,19 +933,19 @@ function renderScreener() {
 function buildScreenerPane(sym) {
   const pane = document.createElement('div');
   pane.setAttribute('data-sym', sym);
-  pane.className = 'bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col fade-in';
+  pane.className = 'glass rounded-2xl overflow-hidden flex flex-col fade-in';
   pane.innerHTML =
-    `<div class="flex items-center justify-between gap-2 p-2.5 border-b border-slate-800">
+    `<div class="flex items-center justify-between gap-2 p-2.5 border-b border-slate-800/50">
        <div class="flex items-baseline gap-2 min-w-0">
-         <button onclick="openFromScreener('${sym}')" class="text-sm font-bold text-white hover:text-indigo-400 transition" title="Open full chain">${sym}</button>
+         <button onclick="openFromScreener('${sym}')" class="text-sm font-extrabold text-white hover:text-indigo-400 transition tracking-tight" title="Open full chain">${sym}</button>
          <span data-role="spot" class="text-sm font-bold tabular-nums truncate"></span>
        </div>
        <div class="flex items-center gap-1.5">
          <select data-role="expsel" onchange="changePaneExpiry(this, event)" title="Expiry month"
-           class="bg-slate-800 border border-slate-700 rounded-md px-1 py-0.5 text-[10px] text-slate-400 focus:outline-none focus:border-indigo-500 max-w-[104px]"></select>
+           class="bg-slate-800/50 border border-slate-700/50 rounded-lg px-1.5 py-0.5 text-[10px] text-slate-400 input-ring max-w-[104px]"></select>
          <button data-role="graphbtn" onclick="togglePaneGraph(this, event)" title="Toggle OI graph"
-           class="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-indigo-400 hover:border-indigo-500 transition">&#128202;</button>
-         <button onclick="removeWatchlistItem('${sym}', event)" class="text-slate-600 hover:text-rose-400 text-xs" title="Remove">&#10005;</button>
+           class="text-xs px-1.5 py-0.5 rounded-lg border border-slate-700/50 text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50 transition">&#128202;</button>
+         <button onclick="removeWatchlistItem('${sym}', event)" class="text-slate-600 hover:text-rose-400 text-[10px] w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-500/10 transition" title="Remove">&#10005;</button>
        </div>
      </div>
      <div data-role="stats"></div>
@@ -956,8 +1013,8 @@ function fillChainPane(pane, sym) {
   // paneCharts (persisted), not the DOM, so it survives rebuilds and reloads.
   const paneGraph = paneCharts[paneChartKey(pane)] === 'graph';
   const gBtn = pane.querySelector('[data-role="graphbtn"]');
-  if (gBtn) gBtn.className = 'text-xs px-1.5 py-0.5 rounded border transition ' +
-    (paneGraph ? 'border-indigo-500 text-indigo-400' : 'border-slate-700 text-slate-500 hover:text-indigo-400 hover:border-indigo-500');
+  if (gBtn) gBtn.className = 'text-xs px-1.5 py-0.5 rounded-lg border transition ' +
+    (paneGraph ? 'border-indigo-500/40 text-indigo-400' : 'border-slate-700/50 text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50');
 
   const prevSym = pane.dataset.cursym;
   const prevScroll = chart.scrollTop;
@@ -1035,7 +1092,7 @@ function renderQuad() {
 function buildQuadPane(i) {
   const pane = document.createElement('div');
   pane.setAttribute('data-slot', i);
-  pane.className = 'bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col';
+  pane.className = 'glass rounded-2xl overflow-hidden flex flex-col';
 
   const wl = [...watchlist.keys()];
   const opts = ['<option value="">— select stock —</option>']
@@ -1043,16 +1100,16 @@ function buildQuadPane(i) {
     .join('');
 
   pane.innerHTML =
-    `<div class="flex items-center justify-between gap-2 p-2.5 border-b border-slate-800">
+    `<div class="flex items-center justify-between gap-2 p-2.5 border-b border-slate-800/50">
        <div class="flex items-baseline gap-2 min-w-0">
-         <select data-role="pick" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs font-semibold focus:outline-none focus:border-indigo-500">${opts}</select>
+         <select data-role="pick" class="bg-slate-800/50 border border-slate-700/50 rounded-lg px-2 py-1 text-xs font-bold input-ring">${opts}</select>
          <span data-role="spot" class="text-sm font-bold tabular-nums text-slate-300 truncate"></span>
        </div>
        <div class="flex items-center gap-1.5">
          <select data-role="expsel" onchange="changePaneExpiry(this, event)" title="Expiry month"
-           class="bg-slate-800 border border-slate-700 rounded-md px-1 py-0.5 text-[10px] text-slate-400 focus:outline-none focus:border-indigo-500 max-w-[104px]"></select>
+           class="bg-slate-800/50 border border-slate-700/50 rounded-lg px-1.5 py-0.5 text-[10px] text-slate-400 input-ring max-w-[104px]"></select>
          <button data-role="graphbtn" onclick="togglePaneGraph(this, event)" title="Toggle OI graph"
-           class="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-indigo-400 hover:border-indigo-500 transition">&#128202;</button>
+           class="text-xs px-1.5 py-0.5 rounded-lg border border-slate-700/50 text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50 transition">&#128202;</button>
        </div>
      </div>
      <div data-role="stats"></div>
@@ -1093,25 +1150,25 @@ function quadChainTable(d) {
 
   const head =
     `<table class="w-full text-xs">
-       <thead class="sticky top-0 bg-slate-950/90 backdrop-blur z-10">
-         <tr class="text-[10px] uppercase tracking-wider text-slate-600">
-           <th class="py-1.5 px-2 text-right">C-OI</th>
-           <th class="py-1.5 px-2 text-right text-emerald-500">C-LTP</th>
-           <th class="py-1.5 px-2 text-center border-x border-slate-700 bg-slate-950/80">Strike</th>
-           <th class="py-1.5 px-2 text-left text-rose-500">P-LTP</th>
-           <th class="py-1.5 px-2 text-left">P-OI</th>
+       <thead class="sticky top-0 bg-slate-950/95 backdrop-blur-sm z-10">
+         <tr class="text-[9px] uppercase tracking-[.1em] text-slate-500">
+           <th class="py-1.5 px-2 text-right font-semibold">C-OI</th>
+           <th class="py-1.5 px-2 text-right font-semibold text-emerald-500/80">C-LTP</th>
+           <th class="py-1.5 px-2 text-center font-semibold border-x border-slate-700/40 bg-slate-950/80">Strike</th>
+           <th class="py-1.5 px-2 text-left font-semibold text-rose-500/80">P-LTP</th>
+           <th class="py-1.5 px-2 text-left font-semibold">P-OI</th>
          </tr>
        </thead><tbody>`;
 
   const body = rows.map(r => {
     const c = r.call || {}, p = r.put || {};
     const callITM = spot > r.strike, putITM = r.strike > spot, isATM = r.strike === atmStrike;
-    const callBg = callITM ? 'bg-emerald-950/30' : '', putBg = putITM ? 'bg-rose-950/30' : '';
-    const rowBorder = isATM ? 'border-y border-indigo-500/40' : 'border-b border-slate-800/50';
-    return `<tr class="${rowBorder}" ${isATM ? 'data-atm="1"' : ''}>
+    const callBg = callITM ? 'bg-emerald-950/20' : '', putBg = putITM ? 'bg-rose-950/20' : '';
+    const rowBorder = isATM ? 'border-y border-indigo-500/30' : 'border-b border-slate-800/30';
+    return `<tr class="${rowBorder} chain-row" ${isATM ? 'data-atm="1"' : ''}>
       <td class="py-1.5 px-2 text-right tabular-nums ${callBg} text-slate-500">${fmtOI(c.oi)}${c.oi_chg ? `<span class="text-[8px] ${c.oi_chg > 0 ? 'text-emerald-500' : 'text-rose-500'}">${c.oi_chg > 0 ? '▲' : '▼'}</span>` : ''}</td>
       <td class="py-1.5 px-2 text-right tabular-nums font-semibold ${callBg} ${callITM ? 'text-emerald-400' : 'text-slate-400'}">${fmt(c.ltp)}</td>
-      <td class="py-1.5 px-2 text-center font-bold tabular-nums bg-slate-950/50 border-x border-slate-700/50 ${isATM ? 'text-indigo-400' : 'text-slate-300'}">${r.strike}</td>
+      <td class="py-1.5 px-2 text-center font-bold tabular-nums bg-slate-950/40 border-x border-slate-700/30 ${isATM ? 'text-indigo-400' : 'text-slate-300'}">${r.strike}</td>
       <td class="py-1.5 px-2 text-left tabular-nums font-semibold ${putBg} ${putITM ? 'text-rose-400' : 'text-slate-400'}">${fmt(p.ltp)}</td>
       <td class="py-1.5 px-2 text-left tabular-nums ${putBg} text-slate-500">${fmtOI(p.oi)}${p.oi_chg ? `<span class="text-[8px] ${p.oi_chg > 0 ? 'text-emerald-500' : 'text-rose-500'}">${p.oi_chg > 0 ? '▲' : '▼'}</span>` : ''}</td>
     </tr>`;
@@ -1171,8 +1228,8 @@ function renderDetail() {
   const gapBtn = document.getElementById('gapToggleBtn');
   const gap = strikeGapFor(spot);
   gapBtn.textContent = gapMode ? (gap ? `Gap: ${gap}` : 'Gap: auto') : 'All strikes';
-  gapBtn.className = 'bg-slate-800 border border-slate-700 hover:border-indigo-500 text-sm px-3 py-2 rounded-lg font-medium transition ' +
-    (gapMode ? 'text-indigo-400' : 'text-slate-400');
+  gapBtn.className = 'glass text-sm px-3 py-2 rounded-xl font-medium transition ' +
+    (gapMode ? 'text-indigo-400 !border-indigo-500/40' : 'text-slate-400 hover:border-indigo-500/50');
 
   // Alert button state
   updateAlertBtn();
@@ -1182,8 +1239,8 @@ function renderDetail() {
   const scroll = document.getElementById('chainScroll');
   const graphEl = document.getElementById('chainGraph');
   const graphBtn = document.getElementById('graphToggleBtn');
-  graphBtn.className = 'bg-slate-800 border text-sm px-3 py-2 rounded-lg font-medium transition ' +
-    (chartMode === 'graph' ? 'border-indigo-500 text-indigo-400' : 'border-slate-700 hover:border-indigo-500 text-slate-300');
+  graphBtn.className = 'glass text-sm px-3 py-2 rounded-xl font-medium transition ' +
+    (chartMode === 'graph' ? '!border-indigo-500/40 text-indigo-400' : 'hover:border-indigo-500/50 text-slate-300');
   scroll.classList.toggle('hidden', chartMode === 'graph');
   graphEl.classList.toggle('hidden', chartMode !== 'graph');
 
@@ -1338,12 +1395,17 @@ function renderStockGraph(sym, d) {
 
   const fmtVol = v => { if (v >= 1e7) return (v/1e7).toFixed(1)+'Cr'; if (v >= 1e5) return (v/1e5).toFixed(1)+'L'; if (v >= 1e3) return (v/1e3).toFixed(0)+'K'; return String(Math.round(v)); };
 
+  // Geometry + candle data embedded so the crosshair overlay can be redrawn on
+  // hover without recomputing the whole chart (see chartCrosshair()).
+  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap, lo, hi, span, W, H, n, isDaily, hasVol, volBase };
+  const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
+
   return `<div class="p-3">
     <div class="flex justify-between items-baseline mb-1 px-1">
       <span class="text-[10px] uppercase tracking-wider text-slate-500">${isDaily ? 'Daily (45d)' : 'Intraday (5m)'} &middot; ${sym}</span>
       <span class="text-xs font-bold tabular-nums" style="color:${dayCol}">${fmt(last)} <span class="font-medium">(${dayUp ? '+' : ''}${(((last - first) / first) * 100).toFixed(2)}%)</span></span>
     </div>
-    <svg viewBox="0 0 ${W} ${H}" class="w-full" style="min-height:${hasVol ? 220 : 180}px">
+    <svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" style="min-height:${hasVol ? 220 : 180}px;cursor:crosshair">
       ${grid.map(v => `
         <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1e293b" stroke-dasharray="3,4"/>
         <text x="${W - P.r + 6}" y="${(y(v) + 3.5).toFixed(1)}" fill="#64748b" font-size="10" font-family="inherit">${fmt(v)}</text>`).join('')}
@@ -1356,6 +1418,19 @@ function renderStockGraph(sym, d) {
       <text x="${P.l}" y="${H - 8}" fill="#64748b" font-size="10">${lbl(candles[0][0])}</text>
       <text x="${(P.l + iw / 2).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="middle">${lbl(candles[mid][0])}</text>
       <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="end">${lbl(candles[n-1][0])}</text>
+      <g class="cx-layer" style="display:none;pointer-events:none">
+        <line class="cx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#94a3b8" stroke-width="0.7" stroke-dasharray="3,3"/>
+        <line class="cx-h" x1="${P.l}" x2="${(W - P.r).toFixed(1)}" stroke="#94a3b8" stroke-width="0.7" stroke-dasharray="3,3"/>
+        <circle class="cx-dot" r="2.6" fill="#e2e8f0"/>
+        <g class="cx-ptag">
+          <rect x="${(W - P.r).toFixed(1)}" width="${(P.r - 2).toFixed(1)}" height="15" y="0" fill="#334155" rx="2"/>
+          <text class="cx-ptext" x="${(W - P.r + 5).toFixed(1)}" y="0" fill="#e2e8f0" font-size="10" font-family="inherit"></text>
+        </g>
+        <g class="cx-tip">
+          <rect class="cx-tipbg" width="112" height="86" rx="4" fill="#0f172a" fill-opacity="0.92" stroke="#334155" stroke-width="0.8"/>
+          <text class="cx-tiptext" font-size="9.5" font-family="inherit" fill="#cbd5e1"></text>
+        </g>
+      </g>
     </svg>
   </div>`;
 }
@@ -1405,27 +1480,27 @@ function renderChainTable(d, spot) {
     const isATM = rows.length > 1 && strike === atmStrike;
     const isCustom = r.custom;
 
-    const callBg = callITM ? 'bg-emerald-950/30' : '';
-    const putBg  = putITM  ? 'bg-rose-950/30'    : '';
-    const atmBorder = isATM ? 'border-y-2 border-indigo-500/40' : 'border-b border-slate-800/60';
+    const callBg = callITM ? 'bg-emerald-950/20' : '';
+    const putBg  = putITM  ? 'bg-rose-950/20'    : '';
+    const atmBorder = isATM ? 'border-y-2 border-indigo-500/30' : 'border-b border-slate-800/40';
 
     const badge = (itm, col) => `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
       itm ? `bg-${col}-500/20 text-${col}-300` : 'bg-slate-800 text-slate-600'}">${itm?'ITM':'OTM'}</span>`;
 
-    return `<tr class="${atmBorder} hover:bg-slate-800/40 transition-colors" ${isATM ? 'data-atm="1"' : ''}>
+    return `<tr class="${atmBorder} chain-row" ${isATM ? 'data-atm="1"' : ''}>
       <td class="py-2 px-2 ${callBg}">${badge(callITM,'emerald')}</td>
       <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} ${callITM?'text-slate-400':'text-slate-600'}">${fmtOI(c.oi)}${oiChg(c.oi_chg)}</td>
-      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-600">${Number(c.iv||0).toFixed(1)}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-500">${Number(c.iv||0).toFixed(1)}</td>
       <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-500">${Number(c.delta||0).toFixed(2)}</td>
-      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-600">${fmt(c.bid||0)}/${fmt(c.ask||0)}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-500">${fmt(c.bid||0)}/${fmt(c.ask||0)}</td>
       <td class="py-2 px-2 text-right tabular-nums font-semibold ${callBg} ${callITM?'text-emerald-400':'text-slate-400'}">${fmt(c.ltp)}</td>
-      <td class="py-2 px-2 text-center font-bold tabular-nums bg-slate-950/60 border-x border-slate-700/50 ${isATM?'text-indigo-400':'text-slate-300'}">
+      <td class="py-2 px-2 text-center font-bold tabular-nums bg-slate-950/40 border-x border-slate-700/30 ${isATM?'text-indigo-400':'text-slate-300'}">
         ${strike}${isCustom?'<span class="text-indigo-400 text-[9px] align-super ml-0.5">+</span>':''}${isATM?'<span class="text-[9px] text-indigo-500 block leading-none">ATM</span>':''}
       </td>
       <td class="py-2 px-2 text-left tabular-nums font-semibold ${putBg} ${putITM?'text-rose-400':'text-slate-400'}">${fmt(p.ltp)}</td>
-      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-600">${fmt(p.bid||0)}/${fmt(p.ask||0)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-500">${fmt(p.bid||0)}/${fmt(p.ask||0)}</td>
       <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-500">${Number(p.delta||0).toFixed(2)}</td>
-      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-600">${Number(p.iv||0).toFixed(1)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-500">${Number(p.iv||0).toFixed(1)}</td>
       <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} ${putITM?'text-slate-400':'text-slate-600'}">${fmtOI(p.oi)}${oiChg(p.oi_chg)}</td>
       <td class="py-2 px-2 text-right ${putBg}">${badge(putITM,'rose')}</td>
     </tr>`;
@@ -1477,20 +1552,20 @@ function renderCategories() {
   const stocksEl = document.getElementById('catStocks');
   tabsEl.innerHTML = Object.keys(CATEGORIES).map(cat =>
     `<button onclick="selectCategory('${cat}')"
-       class="cat-tab text-[11px] font-semibold px-3 py-1.5 rounded-full border transition cursor-pointer
+       class="pill text-[11px] px-3 py-1.5 border cursor-pointer
        ${cat === activeCat
-         ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-400'
-         : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white'}">${cat}</button>`
+         ? 'pill-active'
+         : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'}">${cat}</button>`
   ).join('');
 
   const syms = CATEGORIES[activeCat] || [];
   stocksEl.innerHTML = syms.map(sym => {
     const inWL = watchlist.has(sym);
     return `<button onclick="addWatchlistItem('${sym}')"
-      class="qchip text-[11px] font-medium px-2.5 py-1 rounded-full border transition cursor-pointer
+      class="pill text-[11px] px-2.5 py-1 border cursor-pointer
       ${inWL
-        ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-400'
-        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white'}">${sym}</button>`;
+        ? 'pill-active'
+        : 'bg-slate-800/40 border-slate-700/40 text-slate-400 hover:bg-slate-700/40 hover:text-white'}">${sym}</button>`;
   }).join('');
 }
 
@@ -1572,8 +1647,8 @@ function updateAlertBtn() {
   const btn = document.getElementById('alertToggleBtn');
   if (!btn) return;
   const hasAlert = selectedSymbol && priceAlerts[selectedSymbol];
-  btn.className = 'bg-slate-800 border text-sm px-3 py-2 rounded-lg font-medium transition ' +
-    (hasAlert ? 'border-amber-500 text-amber-400' : 'border-slate-700 hover:border-amber-500 text-slate-300');
+  btn.className = 'glass text-sm px-3 py-2 rounded-xl font-medium transition ' +
+    (hasAlert ? '!border-amber-500/40 text-amber-400' : 'hover:border-amber-500/50 text-slate-300');
 }
 
 function updateAlertStatus() {
@@ -1586,6 +1661,93 @@ function updateAlertStatus() {
   if (a.below) parts.push(`Below ${fmt(a.below)}${a.belowFired ? ' ✓' : ''}`);
   el.textContent = parts.join(' · ');
 }
+
+// ========================= CHART CROSSHAIR =========================
+// One delegated handler drives the crosshair on every rendered price chart.
+// Charts embed their geometry + candles in data-chart (see renderStockGraph),
+// so this survives the live re-renders that replace the SVG markup.
+function chartCrosshair(ev) {
+  const svg = ev.target.closest ? ev.target.closest('svg[data-chart]') : null;
+  // Hide the crosshair on any chart the pointer is no longer over.
+  document.querySelectorAll('svg[data-chart] .cx-layer').forEach(l => {
+    if (!svg || !svg.contains(l)) l.style.display = 'none';
+  });
+  if (!svg) return;
+  const layer = svg.querySelector('.cx-layer');
+  const ctm = svg.getScreenCTM();
+  if (!layer || !ctm) return;
+  let data;
+  try { data = JSON.parse(decodeURIComponent(svg.getAttribute('data-chart'))); } catch (e) { return; }
+  const g = data.g, c = data.c;
+
+  const p = svg.createSVGPoint();
+  p.x = ev.clientX; p.y = ev.clientY;
+  const loc = p.matrixTransform(ctm.inverse());
+  const plotL = g.Pl, plotR = g.W - g.Pr, plotT = g.Pt, plotB = g.Pt + g.ih;
+  const areaB = g.hasVol ? g.volBase : plotB;
+  if (loc.x < plotL - 4 || loc.x > plotR + 4 || loc.y < plotT - 4 || loc.y > areaB + 4) {
+    layer.style.display = 'none';
+    return;
+  }
+
+  let i = Math.round((loc.x - g.Pl) / g.gap - 0.5);
+  i = Math.max(0, Math.min(g.n - 1, i));
+  const cand = c[i];                                 // [ts, o, h, l, c, vol]
+  const cx = g.Pl + (i + 0.5) * g.gap;
+  const my = Math.max(plotT, Math.min(plotB, loc.y));
+  const priceAt = g.lo + (1 - (my - g.Pt) / g.ih) * g.span;
+  const closeY = g.Pt + (1 - (cand[4] - g.lo) / g.span) * g.ih;
+
+  layer.style.display = '';
+  const vLine = layer.querySelector('.cx-v');
+  vLine.setAttribute('x1', cx.toFixed(1)); vLine.setAttribute('x2', cx.toFixed(1));
+  vLine.setAttribute('y2', areaB.toFixed(1));
+  const hLine = layer.querySelector('.cx-h');
+  hLine.setAttribute('y1', my.toFixed(1)); hLine.setAttribute('y2', my.toFixed(1));
+  const dot = layer.querySelector('.cx-dot');
+  dot.setAttribute('cx', cx.toFixed(1)); dot.setAttribute('cy', closeY.toFixed(1));
+
+  // Price tag on the right axis at the horizontal guide.
+  layer.querySelector('.cx-ptag rect').setAttribute('y', (my - 7.5).toFixed(1));
+  const ptext = layer.querySelector('.cx-ptext');
+  ptext.setAttribute('y', (my + 3.3).toFixed(1));
+  ptext.textContent = fmt(priceAt);
+
+  // OHLC tooltip for the hovered candle.
+  const up = cand[4] >= cand[1];
+  const col = up ? '#34d399' : '#fb7185';
+  const dt = g.isDaily
+    ? new Date(cand[0]).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    : new Date(cand[0]).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const chg = cand[1] ? ((cand[4] - cand[1]) / cand[1]) * 100 : 0;
+  const vfmt = v => v >= 1e7 ? (v/1e7).toFixed(1)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(1)+'L' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : String(Math.round(v));
+  const rows = [
+    [dt, '#e2e8f0', '600'],
+    ['O  ' + fmt(cand[1]), '#94a3b8'],
+    ['H  ' + fmt(cand[2]), '#94a3b8'],
+    ['L  ' + fmt(cand[3]), '#94a3b8'],
+    ['C  ' + fmt(cand[4]), col],
+    [(up ? '+' : '') + chg.toFixed(2) + '%', col],
+  ];
+  if (g.hasVol) rows.push(['Vol  ' + vfmt(cand[5] || 0), '#94a3b8']);
+
+  const bw = 112, bh = 12 + rows.length * 12;
+  let bx = cx + 10;
+  if (bx + bw > plotR) bx = cx - 10 - bw;
+  if (bx < plotL) bx = plotL;
+  const by = plotT + 4;
+  const bg = layer.querySelector('.cx-tipbg');
+  bg.setAttribute('x', bx.toFixed(1)); bg.setAttribute('y', by.toFixed(1)); bg.setAttribute('height', bh);
+  const txt = layer.querySelector('.cx-tiptext');
+  txt.setAttribute('y', by.toFixed(1));
+  txt.innerHTML = rows.map((r, idx) =>
+    `<tspan x="${(bx + 7).toFixed(1)}" dy="${idx === 0 ? 15 : 12}" fill="${r[1]}"${r[2] ? ` font-weight="${r[2]}"` : ''}>${r[0]}</tspan>`
+  ).join('');
+}
+document.addEventListener('mousemove', chartCrosshair);
+document.addEventListener('mouseleave', () => {
+  document.querySelectorAll('svg[data-chart] .cx-layer').forEach(l => l.style.display = 'none');
+}, true);
 
 // ========================= SEARCH INPUT =========================
 document.getElementById('searchInput').addEventListener('keydown', e => {
