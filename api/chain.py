@@ -411,6 +411,27 @@ def get_ltp(instrument_key):
     return 0.0
 
 
+_QUOTE_CACHE = {}
+_QUOTE_TTL = 300.0  # 5 min — prev close doesn't change intraday
+
+
+def get_quote(instrument_key):
+    """Fetch full quote including previous day's close price."""
+    now = time.time()
+    hit = _QUOTE_CACHE.get(instrument_key)
+    if hit and (now - hit[0]) < _QUOTE_TTL:
+        return hit[1]
+    data = _get("/v3/market-quote/quote", {"instrument_key": instrument_key}).get("data", {}) or {}
+    result = {"last_price": 0.0, "close_price": 0.0}
+    for v in data.values():
+        if isinstance(v, dict):
+            result["last_price"] = float(v.get("last_price") or 0)
+            result["close_price"] = float(v.get("close_price") or 0)
+            break
+    _QUOTE_CACHE[instrument_key] = (now, result)
+    return result
+
+
 def _leg(opt):
     opt = opt or {}
     md = opt.get("market_data") or {}
@@ -505,16 +526,22 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
             if r["call"]["oi"] or r["put"]["oi"] or r["call"]["ltp"] or r["put"]["ltp"]]
     rows = live or rows
 
+    quote = get_quote(instrument_key)
+    prev_close = quote["close_price"] or spot
+
     analytics = _compute_analytics(rows, spot)
     return {
         "type": "chain", "symbol": symbol, "spot": round(spot, 2),
+        "prev_close": round(prev_close, 2),
         "expiry": expiry, "expiries": expiries, "rows": rows,
         **analytics,
     }
 
 
 def build_synthetic_chain(symbol, instrument_key):
-    spot = get_ltp(instrument_key)
+    quote = get_quote(instrument_key)
+    spot = quote["last_price"] or get_ltp(instrument_key)
+    prev_close = quote["close_price"] or spot
     if spot >= 20000:
         step = 100
     elif spot >= 5000:
@@ -544,6 +571,7 @@ def build_synthetic_chain(symbol, instrument_key):
 
     return {
         "type": "chain", "symbol": symbol, "spot": round(spot, 2),
+        "prev_close": round(prev_close, 2),
         "expiry": "CASH (no options)", "expiries": ["CASH (no options)"],
         "rows": rows, "cash_only": True,
     }

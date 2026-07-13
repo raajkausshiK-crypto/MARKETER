@@ -10,75 +10,254 @@
       darkMode: 'class',
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          fontFamily: { sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'] },
         }
       }
     }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body { background: linear-gradient(180deg, #020617 0%, #0a0f1e 40%, #0f172a 100%); min-height: 100vh; }
+    :root {
+      --bg: #08080a; --bg2: #0e0e12; --bg3: #141418;
+      --border: #1c1c24; --border2: #26262f; --border3: #32323d;
+      --text1: #f0f0f5; --text2: #9898a8; --text3: #5c5c6e;
+      --cyan: #22d3ee; --cyan-dim: rgba(34,211,238,.12);
+      --green: #22c55e; --red: #ef4444;
+      --amber: #f59e0b; --violet: #a78bfa;
+      --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+      --font-mono: 'DM Mono', 'SF Mono', monospace;
+    }
+    body {
+      background: var(--bg);
+      background-image:
+        radial-gradient(circle 800px at 30% 0%, rgba(34,211,238,.03), transparent),
+        radial-gradient(circle 600px at 80% 100%, rgba(167,139,250,.025), transparent);
+      min-height: 100vh;
+      color: var(--text2);
+    }
+
+    /* Dot grid overlay */
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    #app { position: relative; z-index: 1; }
 
     /* Animations */
-    @keyframes flashGreen { 0% { background-color: rgba(34,197,94,.25); } 100% { background-color: transparent; } }
-    @keyframes flashRed   { 0% { background-color: rgba(239,68,68,.25); } 100% { background-color: transparent; } }
+    @keyframes flashGreen { 0% { background-color: rgba(34,197,94,.15); } 100% { background-color: transparent; } }
+    @keyframes flashRed   { 0% { background-color: rgba(239,68,68,.15); } 100% { background-color: transparent; } }
     .flash-up   { animation: flashGreen .5s ease-out; }
     .flash-down { animation: flashRed   .5s ease-out; }
-    @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:.25;} }
+    @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:.15;} }
     .dot-pulse { animation: pulse-dot 1.6s ease-in-out infinite; }
     @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-    .fade-in { animation: fadeIn .3s cubic-bezier(.4,0,.2,1); }
-    @keyframes liveGlow { 0%,100% { box-shadow:0 0 0 0 rgba(52,211,153,.5); } 50% { box-shadow:0 0 0 5px rgba(52,211,153,0); } }
+    .fade-in { animation: fadeIn .3s cubic-bezier(.16,1,.3,1); }
+    @keyframes liveGlow { 0%,100% { box-shadow:0 0 0 0 rgba(34,197,94,.6); } 50% { box-shadow:0 0 0 5px rgba(34,197,94,0); } }
     .live-glow { animation: liveGlow 2s ease-in-out infinite; }
-    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    @keyframes shimmer { from { background-position: -200% center; } to { background-position: 200% center; } }
+    @keyframes borderSpin { 0% { --angle: 0deg; } 100% { --angle: 360deg; } }
 
-    /* Glass panels */
-    .glass { background: rgba(15,23,42,.65); backdrop-filter: blur(16px) saturate(1.4); border: 1px solid rgba(51,65,85,.45); }
-    .glass-strong { background: rgba(15,23,42,.85); backdrop-filter: blur(20px) saturate(1.5); border: 1px solid rgba(51,65,85,.55); }
-
-    /* Card system */
-    .card-elevated {
-      box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.03);
-      transition: all .25s cubic-bezier(.4,0,.2,1);
+    /* Surface system */
+    .surface-1 { background: var(--bg2); border: 1px solid var(--border); }
+    .surface-2 { background: var(--bg3); border: 1px solid var(--border2); }
+    .surface-raised {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      box-shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.2);
     }
-    .card-elevated:hover {
-      box-shadow: 0 4px 12px rgba(0,0,0,.4), 0 12px 28px rgba(0,0,0,.18), 0 0 0 1px rgba(99,102,241,.35);
+
+    /* Stock card */
+    .stock-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all .2s ease;
+    }
+    .stock-card::after {
+      content: '';
+      position: absolute; top: 0; left: 12px; right: 12px; height: 2px;
+      background: var(--border2);
+      border-radius: 0 0 2px 2px;
+      transition: all .3s ease;
+    }
+    .stock-card.card-up::after { background: linear-gradient(90deg, var(--green), rgba(34,197,94,.2)); box-shadow: 0 0 12px rgba(34,197,94,.15); }
+    .stock-card.card-down::after { background: linear-gradient(90deg, var(--red), rgba(239,68,68,.2)); box-shadow: 0 0 12px rgba(239,68,68,.15); }
+    .stock-card:hover {
+      border-color: var(--border3);
+      background: var(--bg3);
       transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    }
+    .stock-card.card-selected {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(34,211,238,.15), 0 4px 20px rgba(34,211,238,.08);
+    }
+    .stock-card.card-selected::after { background: linear-gradient(90deg, var(--cyan), rgba(34,211,238,.2)); box-shadow: 0 0 16px rgba(34,211,238,.2); }
+
+    /* Price display */
+    .price-big { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.3; }
+    .price-green { color: var(--green); }
+    .price-red { color: var(--red); }
+
+    /* Accent */
+    .accent-grad { background: var(--cyan); color: #000; font-weight: 700; }
+    .accent-grad:hover { background: #67e8f9; }
+
+    /* Header bar */
+    .header-bar {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 20px;
     }
 
-    /* Accent gradient */
-    .accent-grad { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #6366f1 100%); background-size: 200% 200%; }
-    .accent-grad:hover { background-position: 100% 100%; }
-    .accent-line { height: 2px; background: linear-gradient(90deg, transparent, #6366f1, #8b5cf6, #6366f1, transparent); }
+    /* Section panel */
+    .section-panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
 
     /* Scrollbar */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(71,85,105,.4); border-radius: 10px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.6); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border3); }
 
     /* Table */
     .chain-row { transition: background .12s ease; }
-    .chain-row:hover { background: rgba(30,41,59,.5) !important; }
+    .chain-row:hover { background: rgba(255,255,255,.03) !important; }
 
     /* Pill button */
-    .pill { border-radius: 9999px; font-weight: 500; transition: all .2s ease; }
-    .pill:hover { transform: scale(1.03); }
-    .pill-active { background: linear-gradient(135deg, rgba(99,102,241,.2), rgba(139,92,246,.15)); border-color: rgba(99,102,241,.5); color: #a5b4fc; box-shadow: 0 0 12px rgba(99,102,241,.12); }
+    .pill {
+      border-radius: 8px; font-weight: 600;
+      transition: all .15s ease;
+      font-family: var(--font-display);
+    }
+    .pill-active {
+      background: rgba(34,211,238,.1);
+      border-color: rgba(34,211,238,.3) !important;
+      color: var(--cyan);
+    }
 
     /* Stat chip */
-    .stat-chip { background: rgba(15,23,42,.5); border: 1px solid rgba(51,65,85,.35); border-radius: .625rem; padding: .5rem .75rem; backdrop-filter: blur(8px); }
+    .stat-chip {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .4rem .65rem;
+    }
+
+    /* Toolbar button */
+    .tool-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      font-weight: 500;
+      font-family: var(--font-display);
+      transition: all .15s ease;
+    }
+    .tool-btn:hover { border-color: var(--border3); background: #1a1a22; }
+    .tool-btn.active { border-color: rgba(34,211,238,.35); color: var(--cyan); background: rgba(34,211,238,.06); }
+
+    /* Input */
+    .input-dark {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text1);
+      transition: all .15s ease;
+      font-family: var(--font-mono);
+    }
+    .input-dark::placeholder { color: var(--text3); font-family: var(--font-display); }
+    .input-dark:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(34,211,238,.08); outline: none; }
 
     /* Toast */
-    .toast-pop { backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.06); box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+    .toast-pop { border: 1px solid var(--border2); box-shadow: 0 8px 32px rgba(0,0,0,.6); border-radius: 10px; }
+
+    /* Badge */
+    .badge-itm { background: rgba(34,197,94,.1); color: #4ade80; border: 1px solid rgba(34,197,94,.15); }
+    .badge-otm { background: rgba(255,255,255,.03); color: var(--text3); border: 1px solid var(--border); }
 
     /* Selection */
-    ::selection { background: rgba(99,102,241,.3); }
+    ::selection { background: rgba(34,211,238,.2); }
 
-    /* Input focus ring */
-    .input-ring { transition: all .2s ease; }
-    .input-ring:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); outline: none; }
+    /* Separator */
+    .sep { height: 1px; background: var(--border); }
+
+    /* Logo */
+    .logo-mark {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--cyan); color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-weight: 700; font-size: 16px;
+    }
+
+    /* Label */
+    .label { font-family: var(--font-display); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--text3); }
+
+    /* View toggle group */
+    .toggle-group {
+      display: inline-flex; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 3px; gap: 2px;
+    }
+    .toggle-btn {
+      font-family: var(--font-display); font-size: 11px; font-weight: 600;
+      padding: 5px 14px; border-radius: 7px; transition: all .15s ease;
+      color: var(--text3); cursor: pointer; border: none; background: none;
+    }
+    .toggle-btn:hover { color: var(--text2); }
+    .toggle-btn.active { background: rgba(34,211,238,.1); color: var(--cyan); }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 8px;
+      background: var(--bg); border: 1px solid var(--border);
+      font-size: 11px; font-weight: 600; font-family: var(--font-display);
+    }
+
+    /* Category chip */
+    .cat-chip {
+      font-family: var(--font-display); font-size: 11px; font-weight: 600;
+      padding: 5px 12px; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--bg3); color: var(--text3); cursor: pointer;
+      transition: all .15s ease;
+    }
+    .cat-chip:hover { color: var(--text2); border-color: var(--border2); }
+    .cat-chip.active { background: rgba(34,211,238,.08); border-color: rgba(34,211,238,.3); color: var(--cyan); }
+
+    /* Stock chip in category */
+    .stock-chip {
+      font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+      padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--text3); cursor: pointer;
+      transition: all .15s ease;
+    }
+    .stock-chip:hover { color: var(--text2); border-color: var(--border2); background: var(--bg3); }
+    .stock-chip.active { background: rgba(34,211,238,.06); border-color: rgba(34,211,238,.25); color: var(--cyan); }
+
+    /* Action button */
+    .btn-primary {
+      background: var(--cyan); color: #000; font-family: var(--font-display);
+      font-weight: 700; font-size: 13px; padding: 10px 20px; border-radius: 10px;
+      border: none; cursor: pointer; transition: all .15s ease;
+    }
+    .btn-primary:hover { background: #67e8f9; box-shadow: 0 0 20px rgba(34,211,238,.15); }
+
+    .btn-danger {
+      background: rgba(239,68,68,.12); color: var(--red); font-family: var(--font-display);
+      font-weight: 700; font-size: 13px; padding: 10px 20px; border-radius: 10px;
+      border: 1px solid rgba(239,68,68,.2); cursor: pointer; transition: all .15s ease;
+    }
+    .btn-danger:hover { background: rgba(239,68,68,.18); border-color: rgba(239,68,68,.35); }
   </style>
 </head>
 <body class="dark text-slate-200 min-h-screen font-sans antialiased">
@@ -86,60 +265,50 @@
 <div id="app" class="max-w-7xl mx-auto px-4 sm:px-6 py-5">
 
   <!-- ===== TOP BAR ===== -->
-  <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+  <header class="header-bar flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
     <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-xl accent-grad flex items-center justify-center shadow-lg shadow-indigo-500/20">
-        <span class="text-white text-lg font-bold">M</span>
-      </div>
+      <div class="logo-mark">M</div>
       <div>
-        <h1 class="text-xl font-extrabold text-white tracking-tight">Market Screener</h1>
-        <p class="text-[11px] text-slate-500 mt-0.5 tracking-wide">Real-time NSE options chain &middot; monitor multiple stocks</p>
+        <h1 class="text-lg font-bold text-white tracking-tight" style="font-family:var(--font-display)">Market Screener</h1>
+        <p class="text-[10px] mt-0.5 tracking-wide" style="color:var(--text3)">Real-time NSE options chain &middot; multi-stock monitor</p>
       </div>
     </div>
-    <div class="flex items-center gap-2.5">
-      <div class="flex items-center gap-2 bg-slate-900/60 border border-slate-800/60 rounded-lg px-3 py-1.5">
-        <span id="statusDot" class="w-2 h-2 rounded-full bg-slate-600"></span>
-        <span id="statusText" class="text-slate-500 text-[11px] font-medium">Offline</span>
+    <div class="flex items-center gap-2">
+      <div class="status-badge">
+        <span id="statusDot" class="w-2 h-2 rounded-full" style="background:var(--text3)"></span>
+        <span id="statusText" style="color:var(--text3)">Offline</span>
       </div>
       <button id="restartBtn" onclick="restartConnection()" title="Restart live feed"
-        class="glass text-slate-400 hover:text-white text-sm font-semibold w-9 h-9 flex items-center justify-center rounded-xl shadow transition hover:border-slate-600">
+        class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text3)">
         &#8635;
       </button>
-      <button id="connectBtn" onclick="toggleConnection()"
-        class="accent-grad text-white text-sm font-semibold px-5 py-2 rounded-xl shadow-lg shadow-indigo-500/25 transition hover:shadow-indigo-500/40">
+      <button id="connectBtn" onclick="toggleConnection()" class="btn-primary">
         Start Live Data
       </button>
     </div>
   </header>
-  <div class="accent-line mb-5 rounded-full opacity-60"></div>
 
   <!-- ===== RATE-LIMIT BANNER ===== -->
-  <div id="rateBanner" class="hidden mb-4 rounded-xl border border-amber-500/30 bg-amber-500/8 text-amber-300 text-sm px-4 py-2.5 flex items-center gap-2 backdrop-blur-sm">
+  <div id="rateBanner" class="hidden mb-4 rounded-xl border border-amber-500/25 bg-amber-500/8 text-amber-300 text-sm px-4 py-2.5 flex items-center gap-2">
     <span class="w-2 h-2 rounded-full bg-amber-400 dot-pulse"></span>
     <span id="rateBannerText">Upstox rate limit hit — pausing requests to recover…</span>
   </div>
 
   <!-- ===== ADD STOCKS BAR ===== -->
-  <section class="glass-strong rounded-2xl p-4 mb-5">
-    <div class="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+  <section class="surface-raised rounded-2xl p-4 mb-5">
+    <div class="flex flex-col sm:flex-row gap-2.5 items-start sm:items-end">
       <div class="flex-1 w-full">
-        <label class="block text-[10px] uppercase tracking-[.1em] text-slate-500 mb-1.5 font-semibold">Add Stock / Index</label>
+        <label class="label mb-1.5 block">Add Stock / Index</label>
         <div class="flex gap-2">
           <input id="searchInput" type="text" placeholder="Type symbol e.g. RELIANCE, NIFTY..."
-            class="flex-1 bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-2.5 text-sm uppercase
-                   input-ring transition placeholder:text-slate-600/80">
-          <button onclick="addWatchlistItem()"
-            class="accent-grad text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 transition whitespace-nowrap hover:shadow-indigo-500/35">
-            + Add
-          </button>
+            class="flex-1 input-dark px-3.5 py-2.5 text-sm uppercase" style="font-family:var(--font-mono)">
+          <button onclick="addWatchlistItem()" class="btn-primary whitespace-nowrap">+ Add</button>
         </div>
       </div>
     </div>
-    <!-- Category tabs + stock chips -->
-    <div class="mt-3">
-      <div id="catTabs" class="flex flex-wrap gap-1.5 mb-2"></div>
-      <div id="catStocks" class="flex flex-wrap gap-1.5 max-h-[160px] overflow-y-auto pr-1"></div>
-    </div>
+    <div class="sep my-3"></div>
+    <div id="catTabs" class="flex flex-wrap gap-1.5 mb-2"></div>
+    <div id="catStocks" class="flex flex-wrap gap-1 max-h-[160px] overflow-y-auto pr-1"></div>
   </section>
 
   <div id="toastArea" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
@@ -151,17 +320,14 @@
 
   <!-- ===== VIEW TOGGLE (Single / Quad / Screener) ===== -->
   <div id="viewToolbar" class="hidden items-center justify-between mb-4">
-    <div class="text-[11px] uppercase tracking-[.08em] text-slate-500 font-semibold">
-      <span id="viewToolbarTitle">Option Chains</span>
-      <span id="stockCount" class="ml-2 text-slate-600 normal-case font-normal"></span>
+    <div>
+      <span id="viewToolbarTitle" class="label">Option Chains</span>
+      <span id="stockCount" class="ml-2 text-[11px] normal-case font-normal" style="color:var(--text3)"></span>
     </div>
-    <div class="inline-flex glass rounded-xl p-1 gap-0.5">
-      <button id="viewSingleBtn" onclick="setViewMode('single')"
-        class="text-[11px] font-semibold px-3.5 py-1.5 rounded-lg transition">Single</button>
-      <button id="viewQuadBtn" onclick="setViewMode('quad')"
-        class="text-[11px] font-semibold px-3.5 py-1.5 rounded-lg transition">Quad &middot; 4</button>
-      <button id="viewScreenerBtn" onclick="setViewMode('screener')"
-        class="text-[11px] font-semibold px-3.5 py-1.5 rounded-lg transition">Screener</button>
+    <div class="toggle-group">
+      <button id="viewSingleBtn" onclick="setViewMode('single')" class="toggle-btn">Single</button>
+      <button id="viewQuadBtn" onclick="setViewMode('quad')" class="toggle-btn">Quad &middot; 4</button>
+      <button id="viewScreenerBtn" onclick="setViewMode('screener')" class="toggle-btn">Screener</button>
     </div>
   </div>
 
@@ -179,43 +345,43 @@
 
   <!-- ===== SELECTED STOCK DETAIL ===== -->
   <section id="detailPanel" class="hidden fade-in">
-    <div class="glass-strong rounded-2xl overflow-hidden shadow-xl shadow-black/20">
+    <div class="section-panel overflow-hidden shadow-2xl shadow-black/30">
       <!-- Detail Header -->
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b border-slate-800/60">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b" style="border-color:var(--border)">
         <div class="flex items-center gap-4">
           <div>
-            <div class="text-[10px] uppercase tracking-[.1em] text-slate-500 font-semibold">Option Chain</div>
+            <div class="label mb-0.5">Option Chain</div>
             <div class="flex items-baseline gap-3">
-              <span id="detailSymbol" class="text-2xl font-extrabold text-white">—</span>
-              <span id="detailSpot" class="text-lg font-bold text-slate-300 tabular-nums">—</span>
+              <span id="detailSymbol" class="text-2xl font-bold text-white tracking-tight" style="font-family:var(--font-display)">—</span>
+              <span id="detailSpot" class="text-lg font-bold tabular-nums" style="font-family:var(--font-mono);color:var(--text2)">—</span>
               <span id="detailChange" class="text-sm font-medium px-2 py-0.5 rounded hidden">—</span>
             </div>
           </div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <button id="gapToggleBtn" onclick="toggleGap()" title="Filter strikes to a price-based gap"
-            class="glass text-sm px-3 py-2 rounded-xl font-medium transition text-indigo-400 hover:border-indigo-500/50">
+            class="tool-btn text-sm px-3.5 py-2 text-indigo-400">
             Gap: auto
           </button>
           <button id="graphToggleBtn" onclick="toggleGraph()" title="Toggle OI graph view"
-            class="glass text-sm px-3 py-2 rounded-xl font-medium transition text-slate-300 hover:border-indigo-500/50">
+            class="tool-btn text-sm px-3.5 py-2 text-slate-300">
             &#128202; Graph
           </button>
           <button id="alertToggleBtn" onclick="toggleAlertPanel()" title="Set price alert"
-            class="glass text-sm px-3 py-2 rounded-xl font-medium transition text-slate-300 hover:border-amber-500/50">
+            class="tool-btn text-sm px-3.5 py-2 text-slate-300">
             &#128276; Alert
           </button>
           <select id="expirySelect" onchange="changeExpiry()"
-            class="glass rounded-xl px-3 py-2 text-sm input-ring transition">
+            class="input-dark px-3.5 py-2 text-sm">
             <option value="">Expiry</option>
           </select>
           <div class="flex gap-1.5">
             <input id="customStrikeInput" type="number" placeholder="Strike..."
-              class="w-28 bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2 text-sm input-ring transition">
+              class="w-28 input-dark px-3 py-2 text-sm">
             <button onclick="addCustomStrike()"
-              class="glass text-sm px-3 py-2 rounded-xl font-medium transition hover:text-white">Add</button>
+              class="tool-btn text-sm px-3.5 py-2 hover:text-white">Add</button>
             <button onclick="resetCustomStrikes()"
-              class="text-rose-400 hover:bg-rose-500/10 text-sm px-3 py-2 rounded-xl font-medium transition border border-transparent hover:border-rose-500/30">Reset</button>
+              class="text-rose-400 hover:bg-rose-500/10 text-sm px-3 py-2 rounded-xl font-medium transition border border-transparent hover:border-rose-500/25">Reset</button>
           </div>
         </div>
       </div>
@@ -224,21 +390,21 @@
       <div id="detailAnalytics" class="hidden"></div>
 
       <!-- Price Alert Panel -->
-      <div id="alertPanel" class="hidden border-b border-slate-800/50 bg-amber-500/5 px-4 py-2.5">
+      <div id="alertPanel" class="hidden border-b border-white/[.04] bg-amber-500/[.06] px-4 py-2.5">
         <div class="flex items-center gap-3 flex-wrap text-xs">
           <span class="text-amber-400 font-semibold">&#128276; Price Alert</span>
           <div class="flex items-center gap-1.5">
             <label class="text-slate-500">Above:</label>
             <input id="alertAbove" type="number" step="any"
-              class="w-28 bg-slate-800/50 border border-slate-700/50 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 input-ring tabular-nums" placeholder="e.g. 25000">
+              class="input-dark w-28 px-2.5 py-1.5 text-xs tabular-nums" placeholder="e.g. 25000">
           </div>
           <div class="flex items-center gap-1.5">
             <label class="text-slate-500">Below:</label>
             <input id="alertBelow" type="number" step="any"
-              class="w-28 bg-slate-800/50 border border-slate-700/50 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 input-ring tabular-nums" placeholder="e.g. 24000">
+              class="input-dark w-28 px-2.5 py-1.5 text-xs tabular-nums" placeholder="e.g. 24000">
           </div>
-          <button onclick="saveAlert()" class="bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm">Set Alert</button>
-          <button onclick="clearAlert()" class="text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/50 px-3 py-1.5 rounded-lg text-xs font-medium transition">Clear</button>
+          <button onclick="saveAlert()" class="bg-amber-600 hover:bg-amber-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold transition shadow-sm shadow-amber-600/25">Set Alert</button>
+          <button onclick="clearAlert()" class="text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/40 px-3 py-1.5 rounded-xl text-xs font-medium transition">Clear</button>
           <span id="alertStatus" class="text-[10px] text-slate-600 ml-auto tabular-nums"></span>
         </div>
       </div>
@@ -247,25 +413,25 @@
       <div id="chainScroll" class="overflow-auto" style="max-height:70vh;">
         <table class="w-full text-sm">
           <thead class="sticky top-0 z-10">
-            <tr class="bg-slate-950/95 backdrop-blur-sm text-[10px] uppercase tracking-[.08em]">
-              <th colspan="6" class="py-2.5 text-center text-emerald-400 font-semibold border-b border-slate-800/60">Calls</th>
-              <th class="py-2.5 text-center text-slate-400 font-semibold border-b border-slate-800/60 border-x border-slate-700/40 bg-slate-950/80">Strike</th>
-              <th colspan="6" class="py-2.5 text-center text-rose-400 font-semibold border-b border-slate-800/60">Puts</th>
+            <tr style="background:var(--bg);font-family:var(--font-display)" class="text-[10px] uppercase tracking-[.08em]">
+              <th colspan="6" class="py-2 text-center font-semibold" style="color:var(--green);border-bottom:1px solid var(--border)">Calls</th>
+              <th class="py-2 text-center font-semibold" style="color:var(--text3);border-bottom:1px solid var(--border);border-left:1px solid var(--border);border-right:1px solid var(--border);background:var(--bg)">Strike</th>
+              <th colspan="6" class="py-2 text-center font-semibold" style="color:var(--red);border-bottom:1px solid var(--border)">Puts</th>
             </tr>
-            <tr class="bg-slate-950/95 text-[9px] uppercase tracking-[.1em] text-slate-500">
-              <th class="py-2 px-2 text-left font-semibold">Status</th>
-              <th class="py-2 px-2 text-right font-semibold">OI (Chg)</th>
-              <th class="py-2 px-2 text-right font-semibold">IV</th>
-              <th class="py-2 px-2 text-right font-semibold">Δ</th>
-              <th class="py-2 px-2 text-right font-semibold">Bid/Ask</th>
-              <th class="py-2 px-2 text-right font-semibold text-emerald-500/80">LTP</th>
-              <th class="py-2 px-2 text-center font-semibold border-x border-slate-700/40 bg-slate-950/80">Price</th>
-              <th class="py-2 px-2 text-left font-semibold text-rose-500/80">LTP</th>
-              <th class="py-2 px-2 text-left font-semibold">Bid/Ask</th>
-              <th class="py-2 px-2 text-left font-semibold">Δ</th>
-              <th class="py-2 px-2 text-left font-semibold">IV</th>
-              <th class="py-2 px-2 text-left font-semibold">OI (Chg)</th>
-              <th class="py-2 px-2 text-right font-semibold">Status</th>
+            <tr style="background:var(--bg);font-family:var(--font-display)" class="text-[9px] uppercase tracking-[.1em]">
+              <th class="py-1.5 px-2 text-left font-semibold" style="color:var(--text3)">Status</th>
+              <th class="py-1.5 px-2 text-right font-semibold" style="color:var(--text3)">OI (Chg)</th>
+              <th class="py-1.5 px-2 text-right font-semibold" style="color:var(--text3)">IV</th>
+              <th class="py-1.5 px-2 text-right font-semibold" style="color:var(--text3)">Δ</th>
+              <th class="py-1.5 px-2 text-right font-semibold" style="color:var(--text3)">Bid/Ask</th>
+              <th class="py-1.5 px-2 text-right font-semibold" style="color:var(--green)">LTP</th>
+              <th class="py-1.5 px-2 text-center font-semibold" style="color:var(--text3);border-left:1px solid var(--border);border-right:1px solid var(--border);background:var(--bg)">Price</th>
+              <th class="py-1.5 px-2 text-left font-semibold" style="color:var(--red)">LTP</th>
+              <th class="py-1.5 px-2 text-left font-semibold" style="color:var(--text3)">Bid/Ask</th>
+              <th class="py-1.5 px-2 text-left font-semibold" style="color:var(--text3)">Δ</th>
+              <th class="py-1.5 px-2 text-left font-semibold" style="color:var(--text3)">IV</th>
+              <th class="py-1.5 px-2 text-left font-semibold" style="color:var(--text3)">OI (Chg)</th>
+              <th class="py-1.5 px-2 text-right font-semibold" style="color:var(--text3)">Status</th>
             </tr>
           </thead>
           <tbody id="chainBody"></tbody>
@@ -282,11 +448,11 @@
 
   <!-- ===== EMPTY STATE ===== -->
   <section id="emptyState" class="text-center py-20">
-    <div class="inline-flex w-16 h-16 rounded-2xl accent-grad items-center justify-center shadow-lg shadow-indigo-500/20 mb-5 opacity-60">
-      <span class="text-3xl">&#128200;</span>
+    <div class="inline-flex w-14 h-14 rounded-xl items-center justify-center mb-4" style="background:var(--bg3);border:1px solid var(--border)">
+      <span class="text-2xl" style="opacity:.5">&#128200;</span>
     </div>
-    <p class="text-slate-400 text-sm font-medium">Add stocks above to start monitoring</p>
-    <p class="text-slate-600 text-xs mt-1.5">Pick a category and click any stock, or type a symbol</p>
+    <p class="text-sm font-medium" style="color:var(--text2);font-family:var(--font-display)">Add stocks above to start monitoring</p>
+    <p class="text-xs mt-1" style="color:var(--text3)">Pick a category and click any stock, or type a symbol</p>
   </section>
 </div>
 
@@ -301,7 +467,7 @@ const IS_REMOTE = !['localhost','127.0.0.1',''].includes(location.hostname);
 const PROD_API = 'https://market-options-screener.vercel.app';
 const API_BASE = IS_REMOTE ? '' : PROD_API;
 
-const watchlist = new Map();   // symbol -> { spot, expiry, expiries, rows, cashOnly, lastSpot, loading, error }
+const watchlist = new Map();   // symbol -> { spot, prevClose, expiry, expiries, rows, cashOnly, lastSpot, loading, error }
 let selectedSymbol = null;
 let customStrikes = [];
 let ws = null;
@@ -343,7 +509,7 @@ function loadState() {
     if (!s || !Array.isArray(s.symbols) || !s.symbols.length) return false;
     s.symbols.forEach(sym => {
       if (!watchlist.has(sym)) {
-        watchlist.set(sym, { spot:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+        watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
         highlightChip(sym);
       }
     });
@@ -443,43 +609,44 @@ function computeAnalytics(d) {
 function analyticsStripHTML(a) {
   if (!a) return '';
   const chip = (label, val, sub, color) =>
-    `<div class="stat-chip min-w-[76px]">
-       <div class="text-[9px] uppercase tracking-[.08em] text-slate-500 font-semibold">${label}</div>
-       <div class="text-sm font-bold tabular-nums ${color || 'text-slate-200'}">${val}</div>
-       ${sub ? `<div class="text-[9px] text-slate-500 tabular-nums">${sub}</div>` : ''}
+    `<div class="stat-chip min-w-[72px]">
+       <div class="label" style="font-size:8px;margin-bottom:2px">${label}</div>
+       <div class="text-sm font-bold tabular-nums" style="font-family:var(--font-mono);color:${color || 'var(--text1)'}">${val}</div>
+       ${sub ? `<div class="text-[8px] tabular-nums" style="color:var(--text3);font-family:var(--font-mono)">${sub}</div>` : ''}
      </div>`;
-  const pcrColor = a.pcr >= 1 ? 'text-emerald-400' : 'text-rose-400';
-  return `<div class="flex flex-wrap gap-2 p-3 border-b border-slate-800/50 bg-slate-950/20">
+  const pcrColor = a.pcr >= 1 ? 'var(--green)' : 'var(--red)';
+  return `<div class="flex flex-wrap gap-1.5 p-3" style="border-bottom:1px solid var(--border);background:rgba(0,0,0,.2)">
     ${chip('PCR', a.pcr.toFixed(2), a.pcr >= 1 ? 'put-heavy' : 'call-heavy', pcrColor)}
-    ${chip('Max Pain', a.maxPain, 'expiry magnet', 'text-indigo-400')}
-    ${chip('Support', a.support, 'max Put OI', 'text-emerald-400')}
-    ${chip('Resistance', a.resistance, 'max Call OI', 'text-rose-400')}
-    ${chip('Call OI', fmtOI(a.totCall), a.totCallChg ? (a.totCallChg > 0 ? '▲ +' : '▼ ') + fmtOI(a.totCallChg) : 'total', a.totCallChg > 0 ? 'text-emerald-400' : a.totCallChg < 0 ? 'text-rose-400' : 'text-slate-300')}
-    ${chip('Put OI', fmtOI(a.totPut), a.totPutChg ? (a.totPutChg > 0 ? '▲ +' : '▼ ') + fmtOI(a.totPutChg) : 'total', a.totPutChg > 0 ? 'text-emerald-400' : a.totPutChg < 0 ? 'text-rose-400' : 'text-slate-300')}
-    ${chip('ATM Straddle', fmt(a.straddle), '@' + a.atmStrike, 'text-amber-400')}
+    ${chip('Max Pain', a.maxPain, 'expiry magnet', 'var(--cyan)')}
+    ${chip('Support', a.support, 'max Put OI', 'var(--green)')}
+    ${chip('Resistance', a.resistance, 'max Call OI', 'var(--red)')}
+    ${chip('Call OI', fmtOI(a.totCall), a.totCallChg ? (a.totCallChg > 0 ? '▲ +' : '▼ ') + fmtOI(a.totCallChg) : 'total', a.totCallChg > 0 ? 'var(--green)' : a.totCallChg < 0 ? 'var(--red)' : 'var(--text2)')}
+    ${chip('Put OI', fmtOI(a.totPut), a.totPutChg ? (a.totPutChg > 0 ? '▲ +' : '▼ ') + fmtOI(a.totPutChg) : 'total', a.totPutChg > 0 ? 'var(--green)' : a.totPutChg < 0 ? 'var(--red)' : 'var(--text2)')}
+    ${chip('ATM Straddle', fmt(a.straddle), '@' + a.atmStrike, 'var(--amber)')}
   </div>`;
 }
 
 // Compact single-line analytics for a quad pane.
 function analyticsLineHTML(a) {
   if (!a) return '';
-  const pcrColor = a.pcr >= 1 ? 'text-emerald-400' : 'text-rose-400';
-  return `<div class="flex items-center flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-1.5 border-b border-slate-800/50 text-[10px] bg-slate-950/20">
-    <span class="text-slate-500">PCR <b class="${pcrColor}">${a.pcr.toFixed(2)}</b></span>
-    <span class="text-slate-500">MaxPain <b class="text-indigo-400">${a.maxPain}</b></span>
-    <span class="text-slate-500">S <b class="text-emerald-400">${a.support}</b></span>
-    <span class="text-slate-500">R <b class="text-rose-400">${a.resistance}</b></span>
-    <span class="text-slate-500">Strad <b class="text-amber-400">${fmt(a.straddle)}</b></span>
-    ${a.totCallChg ? `<span class="text-slate-500">CΔ <b class="${a.totCallChg > 0 ? 'text-emerald-400' : 'text-rose-400'}">${a.totCallChg > 0 ? '+' : ''}${fmtOI(a.totCallChg)}</b></span>` : ''}
-    ${a.totPutChg ? `<span class="text-slate-500">PΔ <b class="${a.totPutChg > 0 ? 'text-emerald-400' : 'text-rose-400'}">${a.totPutChg > 0 ? '+' : ''}${fmtOI(a.totPutChg)}</b></span>` : ''}
+  const pcrColor = a.pcr >= 1 ? 'var(--green)' : 'var(--red)';
+  return `<div class="flex items-center flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-1.5 text-[10px]" style="border-bottom:1px solid var(--border);background:rgba(0,0,0,.15);font-family:var(--font-mono)">
+    <span style="color:var(--text3)">PCR <b style="color:${pcrColor}">${a.pcr.toFixed(2)}</b></span>
+    <span style="color:var(--text3)">MaxPain <b style="color:var(--cyan)">${a.maxPain}</b></span>
+    <span style="color:var(--text3)">S <b style="color:var(--green)">${a.support}</b></span>
+    <span style="color:var(--text3)">R <b style="color:var(--red)">${a.resistance}</b></span>
+    <span style="color:var(--text3)">Strad <b style="color:var(--amber)">${fmt(a.straddle)}</b></span>
+    ${a.totCallChg ? `<span style="color:var(--text3)">CΔ <b style="color:${a.totCallChg > 0 ? 'var(--green)' : 'var(--red)'}">${a.totCallChg > 0 ? '+' : ''}${fmtOI(a.totCallChg)}</b></span>` : ''}
+    ${a.totPutChg ? `<span style="color:var(--text3)">PΔ <b style="color:${a.totPutChg > 0 ? 'var(--green)' : 'var(--red)'}">${a.totPutChg > 0 ? '+' : ''}${fmtOI(a.totPutChg)}</b></span>` : ''}
   </div>`;
 }
 
 // ========================= TOAST =========================
 function toast(msg, type='info') {
   const el = document.createElement('div');
-  const colors = { info:'bg-indigo-600/90', success:'bg-emerald-600/90', error:'bg-rose-600/90', warn:'bg-amber-600/90' };
-  el.className = `${colors[type]||colors.info} text-white text-sm px-4 py-2.5 rounded-xl shadow-xl toast-pop fade-in font-medium`;
+  const colors = { info:'background:rgba(34,211,238,.9)', success:'background:rgba(34,197,94,.9)', error:'background:rgba(239,68,68,.9)', warn:'background:rgba(245,158,11,.9)' };
+  el.className = 'text-sm px-4 py-2.5 shadow-xl toast-pop fade-in font-medium';
+  el.style.cssText = `${colors[type]||colors.info};color:#000;font-family:var(--font-display);font-weight:600`;
   el.textContent = msg;
   document.getElementById('toastArea').appendChild(el);
   setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3000);
@@ -495,7 +662,7 @@ function addWatchlistItem(sym) {
     return;
   }
 
-  watchlist.set(sym, { spot:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+  watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
   renderCards();
   selectSymbol(sym);
   highlightChip(sym);
@@ -575,6 +742,7 @@ async function fetchChain(sym, expiry) {
       if (rateLimitedUntil) { rateLimitedUntil = 0; updateRateBanner(); }   // recovered
       entry.lastSpot = entry.spot || data.spot;
       entry.spot = data.spot || 0;
+      if (data.prev_close) entry.prevClose = data.prev_close;
       // Only update the active expiry from the response if the user hasn't
       // picked a different month via the pane/detail dropdown since this
       // request was sent (stale responses from a prior expiry must not
@@ -737,13 +905,13 @@ function setConnStatus(kind) {
   const text = document.getElementById('statusText');
   const btn = document.getElementById('connectBtn');
   if (kind === 'live') {
-    dot.className = 'w-2 h-2 rounded-full bg-emerald-400 live-glow';
-    text.textContent = 'Live'; text.className = 'text-emerald-400 text-[11px] font-medium';
-    btn.textContent = 'Disconnect'; btn.className = 'bg-rose-600/90 hover:bg-rose-500 text-white text-sm font-semibold px-5 py-2 rounded-xl shadow-lg transition';
+    dot.className = 'w-2 h-2 rounded-full live-glow'; dot.style.background = 'var(--green)';
+    text.textContent = 'Live'; text.style.color = 'var(--green)';
+    btn.textContent = 'Disconnect'; btn.className = 'btn-danger';
   } else {
-    dot.className = 'w-2 h-2 rounded-full bg-slate-600';
-    text.textContent = 'Offline'; text.className = 'text-slate-500 text-[11px] font-medium';
-    btn.textContent = 'Start Live Data'; btn.className = 'accent-grad text-white text-sm font-semibold px-5 py-2 rounded-xl shadow-lg shadow-indigo-500/25 transition hover:shadow-indigo-500/40';
+    dot.className = 'w-2 h-2 rounded-full'; dot.style.background = 'var(--text3)';
+    text.textContent = 'Offline'; text.style.color = 'var(--text3)';
+    btn.textContent = 'Start Live Data'; btn.className = 'btn-primary';
   }
 }
 
@@ -810,12 +978,12 @@ function renderCards() {
     if (!el) {
       el = document.createElement('div');
       el.setAttribute('data-sym', sym);
-      el.className = 'relative glass rounded-2xl p-3.5 cursor-pointer card-elevated fade-in';
+      el.className = 'stock-card fade-in';
       el.onclick = () => selectSymbol(sym);
       el.innerHTML =
-        `<button class="absolute top-2.5 right-2.5 text-slate-600 hover:text-rose-400 text-[10px] transition w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-500/10" title="Remove">&#10005;</button>` +
-        `<div data-role="seg" class="text-[10px] text-slate-500 font-semibold uppercase tracking-[.1em]">F&amp;O</div>` +
-        `<div class="text-[15px] font-extrabold text-white mt-0.5 tracking-tight">${sym}</div>` +
+        `<button class="absolute top-2 right-2 text-[10px] transition w-5 h-5 flex items-center justify-center rounded-md hover:bg-red-500/10" style="color:var(--text3)" title="Remove">&#10005;</button>` +
+        `<div data-role="seg" class="label" style="font-size:9px">F&amp;O</div>` +
+        `<div class="text-sm font-bold text-white mt-0.5 tracking-tight" style="font-family:var(--font-display)">${sym}</div>` +
         `<div data-role="body"></div>`;
       el.querySelector('button').onclick = (e) => removeWatchlistItem(sym, e);
       container.appendChild(el);
@@ -830,13 +998,12 @@ function renderCards() {
 // re-triggered animation and no flicker.
 function updateCard(el, sym, d) {
   const selected = sym === selectedSymbol;
-  if (selected) {
-    el.style.borderColor = 'rgba(99,102,241,.5)';
-    el.style.boxShadow = '0 0 0 1px rgba(99,102,241,.2), 0 4px 16px rgba(99,102,241,.1)';
-  } else {
-    el.style.borderColor = '';
-    el.style.boxShadow = '';
-  }
+  const base = d.prevClose || d.lastSpot;
+  const change = base && d.spot ? d.spot - base : 0;
+  const isUp = change >= 0;
+  el.classList.toggle('card-selected', selected);
+  el.classList.toggle('card-up', !selected && isUp);
+  el.classList.toggle('card-down', !selected && !isUp);
   el.classList.toggle('opacity-60', !connected && !d.loading);
 
   el.querySelector('[data-role="seg"]').textContent = d.cashOnly ? 'CASH' : 'F&O';
@@ -846,21 +1013,20 @@ function updateCard(el, sym, d) {
   if (d.loading) { body.innerHTML = '<div class="text-xs text-slate-600 mt-1">Loading...</div>'; return; }
   if (d.error)   { body.innerHTML = `<div class="text-xs text-rose-400 mt-1 truncate" title="${d.error}">Error</div>`; return; }
 
-  const change = d.lastSpot && d.spot ? d.spot - d.lastSpot : 0;
-  const changePct = d.lastSpot ? (change / d.lastSpot) * 100 : 0;
+  const changePct = base ? (change / base) * 100 : 0;
   const up = change >= 0;
   const maxCallOI = d.rows.length ? Math.max(...d.rows.map(r => r.call?.oi || 0)) : 0;
   const maxPutOI  = d.rows.length ? Math.max(...d.rows.map(r => r.put?.oi || 0)) : 0;
 
   body.innerHTML =
-    `<div class="text-lg font-bold tabular-nums mt-1 ${up?'text-emerald-400':'text-rose-400'}">${fmt(d.spot)}</div>` +
-    `<div class="text-[11px] tabular-nums ${up?'text-emerald-500':'text-rose-500'}">${up?'+':''}${fmt(change)} (${up?'+':''}${changePct.toFixed(2)}%)</div>` +
+    `<div class="price-big mt-1.5 ${up?'price-green':'price-red'}">${fmt(d.spot)}</div>` +
+    `<div class="text-[10px] tabular-nums font-semibold mt-0.5" style="font-family:var(--font-mono);color:${up?'var(--green)':'var(--red)'}">${up?'+':''}${fmt(change)} (${up?'+':''}${changePct.toFixed(2)}%)</div>` +
     (d.rows.length
-      ? `<div class="flex gap-2 mt-2 text-[10px] text-slate-500">` +
+      ? `<div class="flex gap-2 mt-2 text-[9px]" style="font-family:var(--font-mono);color:var(--text3)">` +
         `<span title="Max Call OI">C: ${fmtOI(maxCallOI)}</span>` +
         `<span title="Max Put OI">P: ${fmtOI(maxPutOI)}</span>` +
         `<span title="Total strikes">${d.rows.length} stk</span>` +
-        (priceAlerts[sym] ? `<span class="text-amber-400" title="Alert active">&#128276;</span>` : '') +
+        (priceAlerts[sym] ? `<span style="color:var(--amber)" title="Alert active">&#128276;</span>` : '') +
         `</div>`
       : '');
 }
@@ -880,12 +1046,9 @@ function updateViewToolbar() {
       (loaded < watchlist.size ? ` · ${loaded}/${watchlist.size} chains loaded` : ' · all chains loaded')
     : '';
 
-  const active = ' accent-grad text-white shadow-sm shadow-indigo-500/20';
-  const idle = ' text-slate-400 hover:text-white hover:bg-slate-800/50';
-  const base = 'text-[11px] font-semibold px-3.5 py-1.5 rounded-lg transition';
-  document.getElementById('viewSingleBtn').className   = base + (viewMode === 'single'   ? active : idle);
-  document.getElementById('viewQuadBtn').className     = base + (viewMode === 'quad'     ? active : idle);
-  document.getElementById('viewScreenerBtn').className = base + (viewMode === 'screener' ? active : idle);
+  document.getElementById('viewSingleBtn').className   = 'toggle-btn' + (viewMode === 'single'   ? ' active' : '');
+  document.getElementById('viewQuadBtn').className     = 'toggle-btn' + (viewMode === 'quad'     ? ' active' : '');
+  document.getElementById('viewScreenerBtn').className = 'toggle-btn' + (viewMode === 'screener' ? ' active' : '');
 }
 
 function setViewMode(mode) {
@@ -933,19 +1096,19 @@ function renderScreener() {
 function buildScreenerPane(sym) {
   const pane = document.createElement('div');
   pane.setAttribute('data-sym', sym);
-  pane.className = 'glass rounded-2xl overflow-hidden flex flex-col fade-in';
+  pane.className = 'surface-raised rounded-xl overflow-hidden flex flex-col fade-in';
   pane.innerHTML =
-    `<div class="flex items-center justify-between gap-2 p-2.5 border-b border-slate-800/50">
+    `<div class="flex items-center justify-between gap-2 p-2.5" style="border-bottom:1px solid var(--border)">
        <div class="flex items-baseline gap-2 min-w-0">
-         <button onclick="openFromScreener('${sym}')" class="text-sm font-extrabold text-white hover:text-indigo-400 transition tracking-tight" title="Open full chain">${sym}</button>
-         <span data-role="spot" class="text-sm font-bold tabular-nums truncate"></span>
+         <button onclick="openFromScreener('${sym}')" class="text-sm font-bold text-white transition tracking-tight" style="font-family:var(--font-display)" title="Open full chain">${sym}</button>
+         <span data-role="spot" class="text-sm font-bold tabular-nums truncate" style="font-family:var(--font-mono)"></span>
        </div>
        <div class="flex items-center gap-1.5">
          <select data-role="expsel" onchange="changePaneExpiry(this, event)" title="Expiry month"
-           class="bg-slate-800/50 border border-slate-700/50 rounded-lg px-1.5 py-0.5 text-[10px] text-slate-400 input-ring max-w-[104px]"></select>
+           class="input-dark px-1.5 py-0.5 text-[10px] max-w-[104px]"></select>
          <button data-role="graphbtn" onclick="togglePaneGraph(this, event)" title="Toggle OI graph"
-           class="text-xs px-1.5 py-0.5 rounded-lg border border-slate-700/50 text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50 transition">&#128202;</button>
-         <button onclick="removeWatchlistItem('${sym}', event)" class="text-slate-600 hover:text-rose-400 text-[10px] w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-500/10 transition" title="Remove">&#10005;</button>
+           class="tool-btn text-xs px-1.5 py-0.5">&#128202;</button>
+         <button onclick="removeWatchlistItem('${sym}', event)" class="text-[10px] w-5 h-5 flex items-center justify-center rounded-md transition" style="color:var(--text3)" title="Remove">&#10005;</button>
        </div>
      </div>
      <div data-role="stats"></div>
@@ -987,8 +1150,9 @@ function fillChainPane(pane, sym) {
   const d = watchlist.get(sym);
   if (spotEl) {
     spotEl.textContent = d.spot ? fmt(d.spot) : (d.loading ? 'Loading…' : '');
+    const detailBase = d.prevClose || d.lastSpot;
     spotEl.className = 'text-sm font-bold tabular-nums truncate ' +
-      ((d.lastSpot && d.spot && d.spot < d.lastSpot) ? 'text-rose-400' : 'text-emerald-400');
+      ((detailBase && d.spot && d.spot < detailBase) ? 'text-rose-400' : 'text-emerald-400');
   }
   // Expiry-month dropdown: rebuild only when the list/selection actually
   // changed, and never while the user has the dropdown open.
@@ -1013,8 +1177,7 @@ function fillChainPane(pane, sym) {
   // paneCharts (persisted), not the DOM, so it survives rebuilds and reloads.
   const paneGraph = paneCharts[paneChartKey(pane)] === 'graph';
   const gBtn = pane.querySelector('[data-role="graphbtn"]');
-  if (gBtn) gBtn.className = 'text-xs px-1.5 py-0.5 rounded-lg border transition ' +
-    (paneGraph ? 'border-indigo-500/40 text-indigo-400' : 'border-slate-700/50 text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50');
+  if (gBtn) gBtn.className = 'tool-btn text-xs px-1.5 py-0.5' + (paneGraph ? ' active' : '');
 
   const prevSym = pane.dataset.cursym;
   const prevScroll = chart.scrollTop;
@@ -1092,7 +1255,7 @@ function renderQuad() {
 function buildQuadPane(i) {
   const pane = document.createElement('div');
   pane.setAttribute('data-slot', i);
-  pane.className = 'glass rounded-2xl overflow-hidden flex flex-col';
+  pane.className = 'surface-raised rounded-xl overflow-hidden flex flex-col';
 
   const wl = [...watchlist.keys()];
   const opts = ['<option value="">— select stock —</option>']
@@ -1100,16 +1263,16 @@ function buildQuadPane(i) {
     .join('');
 
   pane.innerHTML =
-    `<div class="flex items-center justify-between gap-2 p-2.5 border-b border-slate-800/50">
+    `<div class="flex items-center justify-between gap-2 p-2.5" style="border-bottom:1px solid var(--border)">
        <div class="flex items-baseline gap-2 min-w-0">
-         <select data-role="pick" class="bg-slate-800/50 border border-slate-700/50 rounded-lg px-2 py-1 text-xs font-bold input-ring">${opts}</select>
-         <span data-role="spot" class="text-sm font-bold tabular-nums text-slate-300 truncate"></span>
+         <select data-role="pick" class="input-dark px-2 py-1 text-xs font-bold" style="font-family:var(--font-display)">${opts}</select>
+         <span data-role="spot" class="text-sm font-bold tabular-nums truncate" style="font-family:var(--font-mono);color:var(--text2)"></span>
        </div>
        <div class="flex items-center gap-1.5">
          <select data-role="expsel" onchange="changePaneExpiry(this, event)" title="Expiry month"
-           class="bg-slate-800/50 border border-slate-700/50 rounded-lg px-1.5 py-0.5 text-[10px] text-slate-400 input-ring max-w-[104px]"></select>
+           class="input-dark px-1.5 py-0.5 text-[10px] max-w-[104px]"></select>
          <button data-role="graphbtn" onclick="togglePaneGraph(this, event)" title="Toggle OI graph"
-           class="text-xs px-1.5 py-0.5 rounded-lg border border-slate-700/50 text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50 transition">&#128202;</button>
+           class="tool-btn text-xs px-1.5 py-0.5">&#128202;</button>
        </div>
      </div>
      <div data-role="stats"></div>
@@ -1149,28 +1312,29 @@ function quadChainTable(d) {
   const atmStrike = all[atmIdx] ? all[atmIdx].strike : null;
 
   const head =
-    `<table class="w-full text-xs">
-       <thead class="sticky top-0 bg-slate-950/95 backdrop-blur-sm z-10">
-         <tr class="text-[9px] uppercase tracking-[.1em] text-slate-500">
-           <th class="py-1.5 px-2 text-right font-semibold">C-OI</th>
-           <th class="py-1.5 px-2 text-right font-semibold text-emerald-500/80">C-LTP</th>
-           <th class="py-1.5 px-2 text-center font-semibold border-x border-slate-700/40 bg-slate-950/80">Strike</th>
-           <th class="py-1.5 px-2 text-left font-semibold text-rose-500/80">P-LTP</th>
-           <th class="py-1.5 px-2 text-left font-semibold">P-OI</th>
+    `<table class="w-full text-xs" style="font-family:var(--font-mono)">
+       <thead class="sticky top-0 z-10" style="background:var(--bg)">
+         <tr class="text-[9px] uppercase tracking-[.1em]" style="font-family:var(--font-display)">
+           <th class="py-1.5 px-2 text-right font-semibold" style="color:var(--text3)">C-OI</th>
+           <th class="py-1.5 px-2 text-right font-semibold" style="color:var(--green)">C-LTP</th>
+           <th class="py-1.5 px-2 text-center font-semibold" style="color:var(--text3);border-left:1px solid var(--border);border-right:1px solid var(--border)">Strike</th>
+           <th class="py-1.5 px-2 text-left font-semibold" style="color:var(--red)">P-LTP</th>
+           <th class="py-1.5 px-2 text-left font-semibold" style="color:var(--text3)">P-OI</th>
          </tr>
        </thead><tbody>`;
 
   const body = rows.map(r => {
     const c = r.call || {}, p = r.put || {};
     const callITM = spot > r.strike, putITM = r.strike > spot, isATM = r.strike === atmStrike;
-    const callBg = callITM ? 'bg-emerald-950/20' : '', putBg = putITM ? 'bg-rose-950/20' : '';
-    const rowBorder = isATM ? 'border-y border-indigo-500/30' : 'border-b border-slate-800/30';
-    return `<tr class="${rowBorder} chain-row" ${isATM ? 'data-atm="1"' : ''}>
-      <td class="py-1.5 px-2 text-right tabular-nums ${callBg} text-slate-500">${fmtOI(c.oi)}${c.oi_chg ? `<span class="text-[8px] ${c.oi_chg > 0 ? 'text-emerald-500' : 'text-rose-500'}">${c.oi_chg > 0 ? '▲' : '▼'}</span>` : ''}</td>
-      <td class="py-1.5 px-2 text-right tabular-nums font-semibold ${callBg} ${callITM ? 'text-emerald-400' : 'text-slate-400'}">${fmt(c.ltp)}</td>
-      <td class="py-1.5 px-2 text-center font-bold tabular-nums bg-slate-950/40 border-x border-slate-700/30 ${isATM ? 'text-indigo-400' : 'text-slate-300'}">${r.strike}</td>
-      <td class="py-1.5 px-2 text-left tabular-nums font-semibold ${putBg} ${putITM ? 'text-rose-400' : 'text-slate-400'}">${fmt(p.ltp)}</td>
-      <td class="py-1.5 px-2 text-left tabular-nums ${putBg} text-slate-500">${fmtOI(p.oi)}${p.oi_chg ? `<span class="text-[8px] ${p.oi_chg > 0 ? 'text-emerald-500' : 'text-rose-500'}">${p.oi_chg > 0 ? '▲' : '▼'}</span>` : ''}</td>
+    const callBg = callITM ? 'background:rgba(34,197,94,.04)' : '';
+    const putBg = putITM ? 'background:rgba(239,68,68,.04)' : '';
+    const rowBorder = isATM ? 'border-top:1px solid rgba(34,211,238,.2);border-bottom:1px solid rgba(34,211,238,.2)' : 'border-bottom:1px solid var(--border)';
+    return `<tr class="chain-row" style="${rowBorder}" ${isATM ? 'data-atm="1"' : ''}>
+      <td class="py-1.5 px-2 text-right tabular-nums" style="${callBg};color:var(--text3)">${fmtOI(c.oi)}${c.oi_chg ? `<span style="font-size:8px;color:${c.oi_chg > 0 ? 'var(--green)' : 'var(--red)'}">${c.oi_chg > 0 ? '▲' : '▼'}</span>` : ''}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums font-semibold" style="${callBg};color:${callITM ? 'var(--green)' : 'var(--text3)'}">${fmt(c.ltp)}</td>
+      <td class="py-1.5 px-2 text-center font-bold tabular-nums" style="background:var(--bg);border-left:1px solid var(--border);border-right:1px solid var(--border);color:${isATM ? 'var(--cyan)' : 'var(--text1)'}">${r.strike}</td>
+      <td class="py-1.5 px-2 text-left tabular-nums font-semibold" style="${putBg};color:${putITM ? 'var(--red)' : 'var(--text3)'}">${fmt(p.ltp)}</td>
+      <td class="py-1.5 px-2 text-left tabular-nums" style="${putBg};color:var(--text3)">${fmtOI(p.oi)}${p.oi_chg ? `<span style="font-size:8px;color:${p.oi_chg > 0 ? 'var(--green)' : 'var(--red)'}">${p.oi_chg > 0 ? '▲' : '▼'}</span>` : ''}</td>
     </tr>`;
   }).join('');
 
@@ -1228,8 +1392,8 @@ function renderDetail() {
   const gapBtn = document.getElementById('gapToggleBtn');
   const gap = strikeGapFor(spot);
   gapBtn.textContent = gapMode ? (gap ? `Gap: ${gap}` : 'Gap: auto') : 'All strikes';
-  gapBtn.className = 'glass text-sm px-3 py-2 rounded-xl font-medium transition ' +
-    (gapMode ? 'text-indigo-400 !border-indigo-500/40' : 'text-slate-400 hover:border-indigo-500/50');
+  gapBtn.className = 'tool-btn text-sm px-3.5 py-2 ' +
+    (gapMode ? 'active text-indigo-400' : 'text-slate-400');
 
   // Alert button state
   updateAlertBtn();
@@ -1239,8 +1403,8 @@ function renderDetail() {
   const scroll = document.getElementById('chainScroll');
   const graphEl = document.getElementById('chainGraph');
   const graphBtn = document.getElementById('graphToggleBtn');
-  graphBtn.className = 'glass text-sm px-3 py-2 rounded-xl font-medium transition ' +
-    (chartMode === 'graph' ? '!border-indigo-500/40 text-indigo-400' : 'hover:border-indigo-500/50 text-slate-300');
+  graphBtn.className = 'tool-btn text-sm px-3.5 py-2 ' +
+    (chartMode === 'graph' ? 'active text-indigo-400' : 'text-slate-300');
   scroll.classList.toggle('hidden', chartMode === 'graph');
   graphEl.classList.toggle('hidden', chartMode !== 'graph');
 
@@ -1347,7 +1511,7 @@ function renderStockGraph(sym, d) {
   const candles = isDaily ? raw : aggregateCandles(raw, 5);
   const n = candles.length;
 
-  const GREEN = '#34d399', RED = '#fb7185';
+  const GREEN = '#22c55e', RED = '#ef4444';
   const W = 640, VOL_H = 48, GAP = 6, P = { t: 14, r: 62, b: 24, l: 10 };
   const hasVol = candles.some(c => (c[5] || 0) > 0);
   const totalVolH = hasVol ? VOL_H + GAP : 0;
@@ -1402,33 +1566,33 @@ function renderStockGraph(sym, d) {
 
   return `<div class="p-3">
     <div class="flex justify-between items-baseline mb-1 px-1">
-      <span class="text-[10px] uppercase tracking-wider text-slate-500">${isDaily ? 'Daily (45d)' : 'Intraday (5m)'} &middot; ${sym}</span>
-      <span class="text-xs font-bold tabular-nums" style="color:${dayCol}">${fmt(last)} <span class="font-medium">(${dayUp ? '+' : ''}${(((last - first) / first) * 100).toFixed(2)}%)</span></span>
+      <span class="label">${isDaily ? 'Daily (45d)' : 'Intraday (5m)'} &middot; ${sym}</span>
+      <span class="text-xs font-bold tabular-nums" style="color:${dayCol};font-family:var(--font-mono)">${fmt(last)} <span class="font-medium">(${dayUp ? '+' : ''}${(((last - first) / first) * 100).toFixed(2)}%)</span></span>
     </div>
     <svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" style="min-height:${hasVol ? 220 : 180}px;cursor:crosshair">
       ${grid.map(v => `
-        <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1e293b" stroke-dasharray="3,4"/>
-        <text x="${W - P.r + 6}" y="${(y(v) + 3.5).toFixed(1)}" fill="#64748b" font-size="10" font-family="inherit">${fmt(v)}</text>`).join('')}
+        <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1c1c24" stroke-dasharray="3,4"/>
+        <text x="${W - P.r + 6}" y="${(y(v) + 3.5).toFixed(1)}" fill="#5c5c6e" font-size="10" font-family="DM Mono, monospace">${fmt(v)}</text>`).join('')}
       ${sticks}
       ${hasVol ? `
-        <line x1="${P.l}" y1="${(P.t + ih + GAP).toFixed(1)}" x2="${W - P.r}" y2="${(P.t + ih + GAP).toFixed(1)}" stroke="#1e293b" stroke-width="0.5"/>
-        <text x="${W - P.r + 6}" y="${(P.t + ih + GAP + 10).toFixed(1)}" fill="#475569" font-size="9" font-family="inherit">${fmtVol(maxVol)}</text>
-        <text x="${W - P.r + 6}" y="${volBase.toFixed(1)}" fill="#475569" font-size="9" font-family="inherit">Vol</text>
+        <line x1="${P.l}" y1="${(P.t + ih + GAP).toFixed(1)}" x2="${W - P.r}" y2="${(P.t + ih + GAP).toFixed(1)}" stroke="#1c1c24" stroke-width="0.5"/>
+        <text x="${W - P.r + 6}" y="${(P.t + ih + GAP + 10).toFixed(1)}" fill="#5c5c6e" font-size="9" font-family="DM Mono, monospace">${fmtVol(maxVol)}</text>
+        <text x="${W - P.r + 6}" y="${volBase.toFixed(1)}" fill="#5c5c6e" font-size="9" font-family="DM Mono, monospace">Vol</text>
         ${volBars}` : ''}
-      <text x="${P.l}" y="${H - 8}" fill="#64748b" font-size="10">${lbl(candles[0][0])}</text>
-      <text x="${(P.l + iw / 2).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="middle">${lbl(candles[mid][0])}</text>
-      <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#64748b" font-size="10" text-anchor="end">${lbl(candles[n-1][0])}</text>
+      <text x="${P.l}" y="${H - 8}" fill="#5c5c6e" font-size="10" font-family="DM Mono, monospace">${lbl(candles[0][0])}</text>
+      <text x="${(P.l + iw / 2).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="10" text-anchor="middle" font-family="DM Mono, monospace">${lbl(candles[mid][0])}</text>
+      <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="10" text-anchor="end" font-family="DM Mono, monospace">${lbl(candles[n-1][0])}</text>
       <g class="cx-layer" style="display:none;pointer-events:none">
-        <line class="cx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#94a3b8" stroke-width="0.7" stroke-dasharray="3,3"/>
-        <line class="cx-h" x1="${P.l}" x2="${(W - P.r).toFixed(1)}" stroke="#94a3b8" stroke-width="0.7" stroke-dasharray="3,3"/>
-        <circle class="cx-dot" r="2.6" fill="#e2e8f0"/>
+        <line class="cx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
+        <line class="cx-h" x1="${P.l}" x2="${(W - P.r).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
+        <circle class="cx-dot" r="2.6" fill="#f0f0f5"/>
         <g class="cx-ptag">
-          <rect x="${(W - P.r).toFixed(1)}" width="${(P.r - 2).toFixed(1)}" height="15" y="0" fill="#334155" rx="2"/>
-          <text class="cx-ptext" x="${(W - P.r + 5).toFixed(1)}" y="0" fill="#e2e8f0" font-size="10" font-family="inherit"></text>
+          <rect x="${(W - P.r).toFixed(1)}" width="${(P.r - 2).toFixed(1)}" height="15" y="0" fill="#1c1c24" rx="3"/>
+          <text class="cx-ptext" x="${(W - P.r + 5).toFixed(1)}" y="0" fill="#f0f0f5" font-size="10" font-family="DM Mono, monospace"></text>
         </g>
         <g class="cx-tip">
-          <rect class="cx-tipbg" width="112" height="86" rx="4" fill="#0f172a" fill-opacity="0.92" stroke="#334155" stroke-width="0.8"/>
-          <text class="cx-tiptext" font-size="9.5" font-family="inherit" fill="#cbd5e1"></text>
+          <rect class="cx-tipbg" width="112" height="86" rx="6" fill="#0e0e12" fill-opacity="0.95" stroke="#26262f" stroke-width="0.8"/>
+          <text class="cx-tiptext" font-size="9.5" font-family="DM Mono, monospace" fill="#9898a8"></text>
         </g>
       </g>
     </svg>
@@ -1480,29 +1644,32 @@ function renderChainTable(d, spot) {
     const isATM = rows.length > 1 && strike === atmStrike;
     const isCustom = r.custom;
 
-    const callBg = callITM ? 'bg-emerald-950/20' : '';
-    const putBg  = putITM  ? 'bg-rose-950/20'    : '';
-    const atmBorder = isATM ? 'border-y-2 border-indigo-500/30' : 'border-b border-slate-800/40';
+    const callBg = callITM ? 'background:rgba(34,197,94,.04)' : '';
+    const putBg  = putITM  ? 'background:rgba(239,68,68,.04)'  : '';
+    const atmBorder = isATM ? 'border-top:2px solid rgba(34,211,238,.25);border-bottom:2px solid rgba(34,211,238,.25)' : 'border-bottom:1px solid var(--border)';
 
-    const badge = (itm, col) => `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-      itm ? `bg-${col}-500/20 text-${col}-300` : 'bg-slate-800 text-slate-600'}">${itm?'ITM':'OTM'}</span>`;
+    const badge = (itm, col) => {
+      const c = itm ? (col === 'green' ? 'var(--green)' : 'var(--red)') : 'var(--text3)';
+      const bg = itm ? (col === 'green' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)') : 'rgba(255,255,255,.03)';
+      return `<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;font-family:var(--font-display);background:${bg};color:${c}">${itm?'ITM':'OTM'}</span>`;
+    };
 
-    return `<tr class="${atmBorder} chain-row" ${isATM ? 'data-atm="1"' : ''}>
-      <td class="py-2 px-2 ${callBg}">${badge(callITM,'emerald')}</td>
-      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} ${callITM?'text-slate-400':'text-slate-600'}">${fmtOI(c.oi)}${oiChg(c.oi_chg)}</td>
-      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-500">${Number(c.iv||0).toFixed(1)}</td>
-      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-500">${Number(c.delta||0).toFixed(2)}</td>
-      <td class="py-2 px-2 text-right tabular-nums text-xs ${callBg} text-slate-500">${fmt(c.bid||0)}/${fmt(c.ask||0)}</td>
-      <td class="py-2 px-2 text-right tabular-nums font-semibold ${callBg} ${callITM?'text-emerald-400':'text-slate-400'}">${fmt(c.ltp)}</td>
-      <td class="py-2 px-2 text-center font-bold tabular-nums bg-slate-950/40 border-x border-slate-700/30 ${isATM?'text-indigo-400':'text-slate-300'}">
-        ${strike}${isCustom?'<span class="text-indigo-400 text-[9px] align-super ml-0.5">+</span>':''}${isATM?'<span class="text-[9px] text-indigo-500 block leading-none">ATM</span>':''}
+    return `<tr class="chain-row" style="${atmBorder};font-family:var(--font-mono)" ${isATM ? 'data-atm="1"' : ''}>
+      <td class="py-2 px-2" style="${callBg}">${badge(callITM,'green')}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs" style="${callBg};color:${callITM?'var(--text2)':'var(--text3)'}">${fmtOI(c.oi)}${oiChg(c.oi_chg)}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs" style="${callBg};color:var(--text3)">${Number(c.iv||0).toFixed(1)}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs" style="${callBg};color:var(--text3)">${Number(c.delta||0).toFixed(2)}</td>
+      <td class="py-2 px-2 text-right tabular-nums text-xs" style="${callBg};color:var(--text3)">${fmt(c.bid||0)}/${fmt(c.ask||0)}</td>
+      <td class="py-2 px-2 text-right tabular-nums font-semibold" style="${callBg};color:${callITM?'var(--green)':'var(--text3)'}">${fmt(c.ltp)}</td>
+      <td class="py-2 px-2 text-center font-bold tabular-nums" style="background:var(--bg);border-left:1px solid var(--border);border-right:1px solid var(--border);color:${isATM?'var(--cyan)':'var(--text1)'}">
+        ${strike}${isCustom?'<span style="color:var(--cyan);font-size:9px" class="align-super ml-0.5">+</span>':''}${isATM?'<span style="color:var(--cyan);font-size:9px;opacity:.7" class="block leading-none">ATM</span>':''}
       </td>
-      <td class="py-2 px-2 text-left tabular-nums font-semibold ${putBg} ${putITM?'text-rose-400':'text-slate-400'}">${fmt(p.ltp)}</td>
-      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-500">${fmt(p.bid||0)}/${fmt(p.ask||0)}</td>
-      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-500">${Number(p.delta||0).toFixed(2)}</td>
-      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} text-slate-500">${Number(p.iv||0).toFixed(1)}</td>
-      <td class="py-2 px-2 text-left tabular-nums text-xs ${putBg} ${putITM?'text-slate-400':'text-slate-600'}">${fmtOI(p.oi)}${oiChg(p.oi_chg)}</td>
-      <td class="py-2 px-2 text-right ${putBg}">${badge(putITM,'rose')}</td>
+      <td class="py-2 px-2 text-left tabular-nums font-semibold" style="${putBg};color:${putITM?'var(--red)':'var(--text3)'}">${fmt(p.ltp)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs" style="${putBg};color:var(--text3)">${fmt(p.bid||0)}/${fmt(p.ask||0)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs" style="${putBg};color:var(--text3)">${Number(p.delta||0).toFixed(2)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs" style="${putBg};color:var(--text3)">${Number(p.iv||0).toFixed(1)}</td>
+      <td class="py-2 px-2 text-left tabular-nums text-xs" style="${putBg};color:${putITM?'var(--text2)':'var(--text3)'}">${fmtOI(p.oi)}${oiChg(p.oi_chg)}</td>
+      <td class="py-2 px-2 text-right" style="${putBg}">${badge(putITM,'red')}</td>
     </tr>`;
   }).join('');
 }
@@ -1552,25 +1719,53 @@ function renderCategories() {
   const stocksEl = document.getElementById('catStocks');
   tabsEl.innerHTML = Object.keys(CATEGORIES).map(cat =>
     `<button onclick="selectCategory('${cat}')"
-       class="pill text-[11px] px-3 py-1.5 border cursor-pointer
-       ${cat === activeCat
-         ? 'pill-active'
-         : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'}">${cat}</button>`
+       class="cat-chip ${cat === activeCat ? 'active' : ''}">${cat}</button>`
   ).join('');
 
   const syms = CATEGORIES[activeCat] || [];
   stocksEl.innerHTML = syms.map(sym => {
     const inWL = watchlist.has(sym);
     return `<button onclick="addWatchlistItem('${sym}')"
-      class="pill text-[11px] px-2.5 py-1 border cursor-pointer
-      ${inWL
-        ? 'pill-active'
-        : 'bg-slate-800/40 border-slate-700/40 text-slate-400 hover:bg-slate-700/40 hover:text-white'}">${sym}</button>`;
+      class="stock-chip ${inWL ? 'active' : ''}">${sym}</button>`;
   }).join('');
 }
 
 function selectCategory(cat) {
+  const prevCat = activeCat;
   activeCat = cat;
+
+  if (prevCat !== cat) {
+    // Remove stocks that belonged to the previous category
+    const prevSyms = CATEGORIES[prevCat] || [];
+    prevSyms.forEach(sym => {
+      if (watchlist.has(sym)) {
+        watchlist.delete(sym);
+        if (selectedSymbol === sym) selectedSymbol = null;
+        delete paneCharts['s:' + sym];
+        unhighlightChip(sym);
+      }
+    });
+
+    // Add all stocks from the new category
+    const newSyms = CATEGORIES[cat] || [];
+    newSyms.forEach(sym => {
+      if (!watchlist.has(sym)) {
+        watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+      }
+    });
+
+    if (!selectedSymbol && newSyms.length) selectedSymbol = newSyms[0];
+    quadSlots = quadSlots.map(s => (s && watchlist.has(s)) ? s : null);
+    quadMembershipSig = '';
+
+    renderCards();
+    saveState();
+    if (connected) startAllPolling();
+    if (viewMode === 'single') renderDetail();
+    else if (viewMode === 'quad') renderQuad();
+    else if (viewMode === 'screener') renderScreener();
+  }
+
   renderCategories();
 }
 
@@ -1647,8 +1842,8 @@ function updateAlertBtn() {
   const btn = document.getElementById('alertToggleBtn');
   if (!btn) return;
   const hasAlert = selectedSymbol && priceAlerts[selectedSymbol];
-  btn.className = 'glass text-sm px-3 py-2 rounded-xl font-medium transition ' +
-    (hasAlert ? '!border-amber-500/40 text-amber-400' : 'hover:border-amber-500/50 text-slate-300');
+  btn.className = 'tool-btn text-sm px-3.5 py-2 ' +
+    (hasAlert ? 'active text-amber-400' : 'text-slate-300');
 }
 
 function updateAlertStatus() {
@@ -1715,21 +1910,21 @@ function chartCrosshair(ev) {
 
   // OHLC tooltip for the hovered candle.
   const up = cand[4] >= cand[1];
-  const col = up ? '#34d399' : '#fb7185';
+  const col = up ? '#22c55e' : '#ef4444';
   const dt = g.isDaily
     ? new Date(cand[0]).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
     : new Date(cand[0]).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
   const chg = cand[1] ? ((cand[4] - cand[1]) / cand[1]) * 100 : 0;
   const vfmt = v => v >= 1e7 ? (v/1e7).toFixed(1)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(1)+'L' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : String(Math.round(v));
   const rows = [
-    [dt, '#e2e8f0', '600'],
-    ['O  ' + fmt(cand[1]), '#94a3b8'],
-    ['H  ' + fmt(cand[2]), '#94a3b8'],
-    ['L  ' + fmt(cand[3]), '#94a3b8'],
+    [dt, '#f0f0f5', '600'],
+    ['O  ' + fmt(cand[1]), '#9898a8'],
+    ['H  ' + fmt(cand[2]), '#9898a8'],
+    ['L  ' + fmt(cand[3]), '#9898a8'],
     ['C  ' + fmt(cand[4]), col],
     [(up ? '+' : '') + chg.toFixed(2) + '%', col],
   ];
-  if (g.hasVol) rows.push(['Vol  ' + vfmt(cand[5] || 0), '#94a3b8']);
+  if (g.hasVol) rows.push(['Vol  ' + vfmt(cand[5] || 0), '#9898a8']);
 
   const bw = 112, bh = 12 + rows.length * 12;
   let bx = cx + 10;
