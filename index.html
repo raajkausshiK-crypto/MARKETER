@@ -1044,10 +1044,10 @@ function updateCard(el, sym, d) {
     `<div class="price-big mt-1.5 ${up?'price-green':'price-red'}">${fmt(d.spot)}</div>` +
     `<div class="text-[10px] tabular-nums font-semibold mt-0.5" style="font-family:var(--font-mono);color:${up?'var(--green)':'var(--red)'}">${up?'+':''}${fmt(change)} (${up?'+':''}${changePct.toFixed(2)}%)</div>` +
     (d.rows.length
-      ? `<div class="flex gap-2 mt-2 text-[9px]" style="font-family:var(--font-mono);color:var(--text3)">` +
-        `<span title="Max Call OI">C: ${fmtOI(maxCallOI)}</span>` +
-        `<span title="Max Put OI">P: ${fmtOI(maxPutOI)}</span>` +
-        `<span title="Total strikes">${d.rows.length} stk</span>` +
+      ? `<div class="flex gap-3 mt-2" style="font-family:var(--font-display);font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--text1)">` +
+        `<span title="Max Call OI" style="color:var(--green)">C: ${fmtOI(maxCallOI)}</span>` +
+        `<span title="Max Put OI" style="color:var(--red)">P: ${fmtOI(maxPutOI)}</span>` +
+        `<span title="Total strikes" style="color:var(--cyan)">${d.rows.length} stk</span>` +
         (priceAlerts[sym] ? `<span style="color:var(--amber)" title="Alert active">&#128276;</span>` : '') +
         `</div>`
       : '');
