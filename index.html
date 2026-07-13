@@ -743,6 +743,7 @@ async function fetchChain(sym, expiry) {
       entry.lastSpot = entry.spot || data.spot;
       entry.spot = data.spot || 0;
       if (data.prev_close) entry.prevClose = data.prev_close;
+      if (!entry.prevClose) fetchPrevClose(sym);
       // Only update the active expiry from the response if the user hasn't
       // picked a different month via the pane/detail dropdown since this
       // request was sent (stale responses from a prior expiry must not
@@ -774,6 +775,27 @@ async function fetchChain(sym, expiry) {
   } finally {
     inFlight--;
   }
+}
+
+const _prevCloseLoaded = new Set();
+async function fetchPrevClose(sym) {
+  if (_prevCloseLoaded.has(sym)) return;
+  _prevCloseLoaded.add(sym);
+  try {
+    const url = `${API_BASE}/api/chain?symbol=${encodeURIComponent(sym)}&candles=1`;
+    const res = await fetch(url, { cache:'no-store' });
+    const data = await res.json();
+    const candles = data.candles || [];
+    if (!candles.length) return;
+    const entry = watchlist.get(sym);
+    if (!entry) return;
+    if (data.interval === 'day' && candles.length >= 2) {
+      entry.prevClose = candles[candles.length - 1][4];
+    } else if (data.interval === '1minute' && candles.length) {
+      entry.prevClose = candles[0][1];
+    }
+    if (entry.prevClose) onDataUpdated(sym);
+  } catch {}
 }
 
 // Push fresh data into the cards plus whichever chain view is active.
