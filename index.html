@@ -10,13 +10,13 @@
       darkMode: 'class',
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          fontFamily: { sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'] },
         }
       }
     }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #08080a; --bg2: #0e0e12; --bg3: #141418;
@@ -25,8 +25,8 @@
       --cyan: #22d3ee; --cyan-dim: rgba(34,211,238,.12);
       --green: #22c55e; --red: #ef4444;
       --amber: #f59e0b; --violet: #a78bfa;
-      --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
-      --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+      --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+      --font-mono: 'DM Mono', 'SF Mono', monospace;
     }
     body {
       background: var(--bg);
@@ -467,7 +467,7 @@ const IS_REMOTE = !['localhost','127.0.0.1',''].includes(location.hostname);
 const PROD_API = 'https://market-options-screener.vercel.app';
 const API_BASE = IS_REMOTE ? '' : PROD_API;
 
-const watchlist = new Map();   // symbol -> { spot, expiry, expiries, rows, cashOnly, lastSpot, loading, error }
+const watchlist = new Map();   // symbol -> { spot, prevClose, expiry, expiries, rows, cashOnly, lastSpot, loading, error }
 let selectedSymbol = null;
 let customStrikes = [];
 let ws = null;
@@ -509,7 +509,7 @@ function loadState() {
     if (!s || !Array.isArray(s.symbols) || !s.symbols.length) return false;
     s.symbols.forEach(sym => {
       if (!watchlist.has(sym)) {
-        watchlist.set(sym, { spot:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+        watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
         highlightChip(sym);
       }
     });
@@ -662,7 +662,7 @@ function addWatchlistItem(sym) {
     return;
   }
 
-  watchlist.set(sym, { spot:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+  watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
   renderCards();
   selectSymbol(sym);
   highlightChip(sym);
@@ -742,6 +742,7 @@ async function fetchChain(sym, expiry) {
       if (rateLimitedUntil) { rateLimitedUntil = 0; updateRateBanner(); }   // recovered
       entry.lastSpot = entry.spot || data.spot;
       entry.spot = data.spot || 0;
+      if (data.prev_close) entry.prevClose = data.prev_close;
       // Only update the active expiry from the response if the user hasn't
       // picked a different month via the pane/detail dropdown since this
       // request was sent (stale responses from a prior expiry must not
@@ -997,7 +998,8 @@ function renderCards() {
 // re-triggered animation and no flicker.
 function updateCard(el, sym, d) {
   const selected = sym === selectedSymbol;
-  const change = d.lastSpot && d.spot ? d.spot - d.lastSpot : 0;
+  const base = d.prevClose || d.lastSpot;
+  const change = base && d.spot ? d.spot - base : 0;
   const isUp = change >= 0;
   el.classList.toggle('card-selected', selected);
   el.classList.toggle('card-up', !selected && isUp);
@@ -1011,7 +1013,7 @@ function updateCard(el, sym, d) {
   if (d.loading) { body.innerHTML = '<div class="text-xs text-slate-600 mt-1">Loading...</div>'; return; }
   if (d.error)   { body.innerHTML = `<div class="text-xs text-rose-400 mt-1 truncate" title="${d.error}">Error</div>`; return; }
 
-  const changePct = d.lastSpot ? (change / d.lastSpot) * 100 : 0;
+  const changePct = base ? (change / base) * 100 : 0;
   const up = change >= 0;
   const maxCallOI = d.rows.length ? Math.max(...d.rows.map(r => r.call?.oi || 0)) : 0;
   const maxPutOI  = d.rows.length ? Math.max(...d.rows.map(r => r.put?.oi || 0)) : 0;
@@ -1148,8 +1150,9 @@ function fillChainPane(pane, sym) {
   const d = watchlist.get(sym);
   if (spotEl) {
     spotEl.textContent = d.spot ? fmt(d.spot) : (d.loading ? 'Loading…' : '');
+    const detailBase = d.prevClose || d.lastSpot;
     spotEl.className = 'text-sm font-bold tabular-nums truncate ' +
-      ((d.lastSpot && d.spot && d.spot < d.lastSpot) ? 'text-rose-400' : 'text-emerald-400');
+      ((detailBase && d.spot && d.spot < detailBase) ? 'text-rose-400' : 'text-emerald-400');
   }
   // Expiry-month dropdown: rebuild only when the list/selection actually
   // changed, and never while the user has the dropdown open.
@@ -1569,27 +1572,27 @@ function renderStockGraph(sym, d) {
     <svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" style="min-height:${hasVol ? 220 : 180}px;cursor:crosshair">
       ${grid.map(v => `
         <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1c1c24" stroke-dasharray="3,4"/>
-        <text x="${W - P.r + 6}" y="${(y(v) + 3.5).toFixed(1)}" fill="#5c5c6e" font-size="10" font-family="JetBrains Mono, monospace">${fmt(v)}</text>`).join('')}
+        <text x="${W - P.r + 6}" y="${(y(v) + 3.5).toFixed(1)}" fill="#5c5c6e" font-size="10" font-family="DM Mono, monospace">${fmt(v)}</text>`).join('')}
       ${sticks}
       ${hasVol ? `
         <line x1="${P.l}" y1="${(P.t + ih + GAP).toFixed(1)}" x2="${W - P.r}" y2="${(P.t + ih + GAP).toFixed(1)}" stroke="#1c1c24" stroke-width="0.5"/>
-        <text x="${W - P.r + 6}" y="${(P.t + ih + GAP + 10).toFixed(1)}" fill="#5c5c6e" font-size="9" font-family="JetBrains Mono, monospace">${fmtVol(maxVol)}</text>
-        <text x="${W - P.r + 6}" y="${volBase.toFixed(1)}" fill="#5c5c6e" font-size="9" font-family="JetBrains Mono, monospace">Vol</text>
+        <text x="${W - P.r + 6}" y="${(P.t + ih + GAP + 10).toFixed(1)}" fill="#5c5c6e" font-size="9" font-family="DM Mono, monospace">${fmtVol(maxVol)}</text>
+        <text x="${W - P.r + 6}" y="${volBase.toFixed(1)}" fill="#5c5c6e" font-size="9" font-family="DM Mono, monospace">Vol</text>
         ${volBars}` : ''}
-      <text x="${P.l}" y="${H - 8}" fill="#5c5c6e" font-size="10" font-family="JetBrains Mono, monospace">${lbl(candles[0][0])}</text>
-      <text x="${(P.l + iw / 2).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="10" text-anchor="middle" font-family="JetBrains Mono, monospace">${lbl(candles[mid][0])}</text>
-      <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="10" text-anchor="end" font-family="JetBrains Mono, monospace">${lbl(candles[n-1][0])}</text>
+      <text x="${P.l}" y="${H - 8}" fill="#5c5c6e" font-size="10" font-family="DM Mono, monospace">${lbl(candles[0][0])}</text>
+      <text x="${(P.l + iw / 2).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="10" text-anchor="middle" font-family="DM Mono, monospace">${lbl(candles[mid][0])}</text>
+      <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="10" text-anchor="end" font-family="DM Mono, monospace">${lbl(candles[n-1][0])}</text>
       <g class="cx-layer" style="display:none;pointer-events:none">
         <line class="cx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
         <line class="cx-h" x1="${P.l}" x2="${(W - P.r).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
         <circle class="cx-dot" r="2.6" fill="#f0f0f5"/>
         <g class="cx-ptag">
           <rect x="${(W - P.r).toFixed(1)}" width="${(P.r - 2).toFixed(1)}" height="15" y="0" fill="#1c1c24" rx="3"/>
-          <text class="cx-ptext" x="${(W - P.r + 5).toFixed(1)}" y="0" fill="#f0f0f5" font-size="10" font-family="JetBrains Mono, monospace"></text>
+          <text class="cx-ptext" x="${(W - P.r + 5).toFixed(1)}" y="0" fill="#f0f0f5" font-size="10" font-family="DM Mono, monospace"></text>
         </g>
         <g class="cx-tip">
           <rect class="cx-tipbg" width="112" height="86" rx="6" fill="#0e0e12" fill-opacity="0.95" stroke="#26262f" stroke-width="0.8"/>
-          <text class="cx-tiptext" font-size="9.5" font-family="JetBrains Mono, monospace" fill="#9898a8"></text>
+          <text class="cx-tiptext" font-size="9.5" font-family="DM Mono, monospace" fill="#9898a8"></text>
         </g>
       </g>
     </svg>
@@ -1728,7 +1731,41 @@ function renderCategories() {
 }
 
 function selectCategory(cat) {
+  const prevCat = activeCat;
   activeCat = cat;
+
+  if (prevCat !== cat) {
+    // Remove stocks that belonged to the previous category
+    const prevSyms = CATEGORIES[prevCat] || [];
+    prevSyms.forEach(sym => {
+      if (watchlist.has(sym)) {
+        watchlist.delete(sym);
+        if (selectedSymbol === sym) selectedSymbol = null;
+        delete paneCharts['s:' + sym];
+        unhighlightChip(sym);
+      }
+    });
+
+    // Add all stocks from the new category
+    const newSyms = CATEGORIES[cat] || [];
+    newSyms.forEach(sym => {
+      if (!watchlist.has(sym)) {
+        watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+      }
+    });
+
+    if (!selectedSymbol && newSyms.length) selectedSymbol = newSyms[0];
+    quadSlots = quadSlots.map(s => (s && watchlist.has(s)) ? s : null);
+    quadMembershipSig = '';
+
+    renderCards();
+    saveState();
+    if (connected) startAllPolling();
+    if (viewMode === 'single') renderDetail();
+    else if (viewMode === 'quad') renderQuad();
+    else if (viewMode === 'screener') renderScreener();
+  }
+
   renderCategories();
 }
 
