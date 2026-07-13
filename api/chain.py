@@ -421,13 +421,16 @@ def get_quote(instrument_key):
     hit = _QUOTE_CACHE.get(instrument_key)
     if hit and (now - hit[0]) < _QUOTE_TTL:
         return hit[1]
-    data = _get("/v3/market-quote/quote", {"instrument_key": instrument_key}).get("data", {}) or {}
     result = {"last_price": 0.0, "close_price": 0.0}
-    for v in data.values():
-        if isinstance(v, dict):
-            result["last_price"] = float(v.get("last_price") or 0)
-            result["close_price"] = float(v.get("close_price") or 0)
-            break
+    try:
+        data = _get("/v2/market-quote/quotes", {"instrument_key": instrument_key}).get("data", {}) or {}
+        for v in data.values():
+            if isinstance(v, dict):
+                result["last_price"] = float(v.get("last_price") or 0)
+                result["close_price"] = float(v.get("close_price") or 0)
+                break
+    except Exception:
+        pass
     _QUOTE_CACHE[instrument_key] = (now, result)
     return result
 
