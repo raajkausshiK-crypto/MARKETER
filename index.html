@@ -853,6 +853,20 @@ function onDataUpdated(sym) {
   } else if (viewMode === 'screener') {
     updateScreenerPaneFor(sym);
   }
+  if (_fsSym === sym && document.getElementById('fsOverlay').classList.contains('open')) updateFsPrice();
+}
+
+function updateFsPrice() {
+  const d = watchlist.get(_fsSym);
+  if (!d || !d.spot) return;
+  const base = d.prevClose || d.lastSpot;
+  const price = d.spot;
+  const chg = base ? price - base : 0;
+  const chgPct = base ? (chg / base) * 100 : 0;
+  const up = chg >= 0;
+  const priceEl = document.getElementById('fsPrice');
+  priceEl.textContent = `${fmt(price)}  ${up ? '+' : ''}${fmt(chg)} (${up ? '+' : ''}${chgPct.toFixed(2)}%)`;
+  priceEl.style.color = up ? 'var(--green)' : 'var(--red)';
 }
 
 // ========================= POLLING (preload-all, staggered) =========================
@@ -1534,17 +1548,23 @@ const FS_TIMEFRAMES = [
 function openFsGraph(sym) {
   if (!sym) sym = selectedSymbol;
   if (!sym) return;
-  ensureCandles(sym);
-  const e = candleCache.get(sym);
-  const raw = e && e.candles;
-  if (!raw || !raw.length) return;
 
   _fsSym = sym;
   document.getElementById('fsOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
   document.getElementById('fsTitle').textContent = sym;
+  updateFsPrice();
   renderFsTfBar();
-  renderFsChart();
+
+  ensureCandles(sym);
+  const e = candleCache.get(sym);
+  const raw = e && e.candles;
+  if (raw && raw.length) {
+    renderFsChart();
+  } else {
+    document.getElementById('fsBody').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-family:var(--font-display);font-size:16px">Loading chart…</div>';
+  }
+  _startFsLive();
 }
 
 function renderFsTfBar() {
@@ -1571,13 +1591,7 @@ function renderFsChart() {
   const n = candles.length;
   if (!n) return;
 
-  const first = candles[0][1], last = candles[n - 1][4];
-  const dayUp = last >= first;
-  const chg = last - first;
-  const chgPct = ((chg / first) * 100).toFixed(2);
-  const priceEl = document.getElementById('fsPrice');
-  priceEl.textContent = `${fmt(last)}  ${dayUp ? '+' : ''}${fmt(chg)} (${dayUp ? '+' : ''}${chgPct}%)`;
-  priceEl.style.color = dayUp ? 'var(--green)' : 'var(--red)';
+  updateFsPrice();
 
   const GREEN = '#22c55e', RED = '#ef4444';
   const W = 1200, VOL_H = 60, GAP = 8, P = { t: 16, r: 66, b: 28, l: 10 };
@@ -1591,8 +1605,9 @@ function renderFsChart() {
   const lo = Math.min(...allLo), hi = Math.max(...allHi);
   const span = (hi - lo) || 1;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
-  const cw = Math.max(1.5, Math.min(8, (iw / n) * 0.7));
   const gap2 = iw / n;
+  const cw = Math.max(2, gap2 * 0.88);
+  const wickW = Math.max(1, cw * 0.15);
   const maxVol = hasVol ? Math.max(...candles.map(c => c[5] || 0)) || 1 : 1;
   const volBase = P.t + ih + GAP + VOL_H;
 
@@ -1604,7 +1619,7 @@ function renderFsChart() {
     const col = up ? GREEN : RED;
     const bodyTop = y(Math.max(o, c)), bodyBot = y(Math.min(o, c));
     const bodyH = Math.max(1, bodyBot - bodyTop);
-    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h2).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l2).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h2).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l2).toFixed(1)}" stroke="${col}" stroke-width="${wickW.toFixed(1)}"/>`;
     sticks += `<rect x="${(cx - cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}" rx="0.5"/>`;
     if (hasVol && vol > 0) {
       const vH = (vol / maxVol) * VOL_H;
@@ -1650,9 +1665,24 @@ function renderFsChart() {
   </svg>`;
 }
 
+let _fsLiveTimer = null;
+function _startFsLive() {
+  _stopFsLive();
+  _fsLiveTimer = setInterval(() => {
+    if (!_fsSym || !document.getElementById('fsOverlay').classList.contains('open')) { _stopFsLive(); return; }
+    const e = candleCache.get(_fsSym);
+    if (e) e.t = 0;
+    ensureCandles(_fsSym);
+  }, 10000);
+}
+function _stopFsLive() {
+  if (_fsLiveTimer) { clearInterval(_fsLiveTimer); _fsLiveTimer = null; }
+}
+
 function closeFsGraph() {
   document.getElementById('fsOverlay').classList.remove('open');
   document.body.style.overflow = '';
+  _stopFsLive();
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFsGraph(); });
 
@@ -1682,6 +1712,7 @@ function ensureCandles(sym) {
       if (viewMode === 'single' && selectedSymbol === sym && chartMode === 'graph') renderDetail();
       else if (viewMode === 'quad') updateQuadPanesFor(sym);
       else if (viewMode === 'screener') updateScreenerPaneFor(sym);
+      if (_fsSym === sym && document.getElementById('fsOverlay').classList.contains('open')) renderFsChart();
     })
     .catch(() => { e.fetching = false; candleCache.set(sym, e); });
 }
