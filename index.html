@@ -1591,8 +1591,9 @@ function renderFsChart() {
   const lo = Math.min(...allLo), hi = Math.max(...allHi);
   const span = (hi - lo) || 1;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
-  const cw = Math.max(1.5, Math.min(8, (iw / n) * 0.7));
   const gap2 = iw / n;
+  const cw = Math.max(2, gap2 * 0.88);
+  const wickW = Math.max(1, cw * 0.15);
   const maxVol = hasVol ? Math.max(...candles.map(c => c[5] || 0)) || 1 : 1;
   const volBase = P.t + ih + GAP + VOL_H;
 
@@ -1604,7 +1605,7 @@ function renderFsChart() {
     const col = up ? GREEN : RED;
     const bodyTop = y(Math.max(o, c)), bodyBot = y(Math.min(o, c));
     const bodyH = Math.max(1, bodyBot - bodyTop);
-    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h2).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l2).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h2).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l2).toFixed(1)}" stroke="${col}" stroke-width="${wickW.toFixed(1)}"/>`;
     sticks += `<rect x="${(cx - cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}" rx="0.5"/>`;
     if (hasVol && vol > 0) {
       const vH = (vol / maxVol) * VOL_H;
