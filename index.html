@@ -1545,6 +1545,7 @@ function openFsGraph(sym) {
   document.getElementById('fsTitle').textContent = sym;
   renderFsTfBar();
   renderFsChart();
+  _startFsLive();
 }
 
 function renderFsTfBar() {
@@ -1650,9 +1651,24 @@ function renderFsChart() {
   </svg>`;
 }
 
+let _fsLiveTimer = null;
+function _startFsLive() {
+  _stopFsLive();
+  _fsLiveTimer = setInterval(() => {
+    if (!_fsSym || !document.getElementById('fsOverlay').classList.contains('open')) { _stopFsLive(); return; }
+    const e = candleCache.get(_fsSym);
+    if (e) e.t = 0;
+    ensureCandles(_fsSym);
+  }, 10000);
+}
+function _stopFsLive() {
+  if (_fsLiveTimer) { clearInterval(_fsLiveTimer); _fsLiveTimer = null; }
+}
+
 function closeFsGraph() {
   document.getElementById('fsOverlay').classList.remove('open');
   document.body.style.overflow = '';
+  _stopFsLive();
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFsGraph(); });
 
@@ -1682,6 +1698,7 @@ function ensureCandles(sym) {
       if (viewMode === 'single' && selectedSymbol === sym && chartMode === 'graph') renderDetail();
       else if (viewMode === 'quad') updateQuadPanesFor(sym);
       else if (viewMode === 'screener') updateScreenerPaneFor(sym);
+      if (_fsSym === sym && document.getElementById('fsOverlay').classList.contains('open')) renderFsChart();
     })
     .catch(() => { e.fetching = false; candleCache.set(sym, e); });
 }
