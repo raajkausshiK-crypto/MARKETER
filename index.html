@@ -1517,20 +1517,18 @@ function toggleGraph() {
   saveState();
 }
 
-let _fsSym = null, _fsTf = '5m';
+let _fsSym = null, _fsTf = '1d';
 const FS_TIMEFRAMES = [
-  { key: '1m',  label: '1m',   mins: 1,   type: 'intra' },
-  { key: '5m',  label: '5m',   mins: 5,   type: 'intra' },
-  { key: '10m', label: '10m',  mins: 10,  type: 'intra' },
-  { key: '30m', label: '30m',  mins: 30,  type: 'intra' },
-  { key: '1h',  label: '1H',   mins: 60,  type: 'intra' },
-  { key: '2h',  label: '2H',   mins: 120, type: 'intra' },
-  { key: '4h',  label: '4H',   mins: 240, type: 'intra' },
-  { key: '5h',  label: '5H',   mins: 300, type: 'intra' },
-  { key: '6h',  label: '6H',   mins: 360, type: 'intra' },
-  { key: '1d',  label: '1D',   mins: 1,   type: 'daily' },
-  { key: '1w',  label: '1W',   mins: 5,   type: 'daily' },
-  { key: '1mo', label: '1M',   mins: 22,  type: 'daily' },
+  { key: '1m',  label: '1m',   range: 1   },
+  { key: '5m',  label: '5m',   range: 5   },
+  { key: '10m', label: '10m',  range: 10  },
+  { key: '30m', label: '30m',  range: 30  },
+  { key: '1h',  label: '1H',   range: 60  },
+  { key: '2h',  label: '2H',   range: 120 },
+  { key: '4h',  label: '4H',   range: 240 },
+  { key: '5h',  label: '5H',   range: 300 },
+  { key: '6h',  label: '6H',   range: 360 },
+  { key: '1d',  label: '1D',   range: 0   },
 ];
 
 function openFsGraph(sym) {
@@ -1542,31 +1540,24 @@ function openFsGraph(sym) {
   if (!raw || !raw.length) return;
 
   _fsSym = sym;
-  const isDaily = e.interval === 'day';
-  if (isDaily) _fsTf = '1d';
-  else if (!['1m','5m','10m','30m','1h','2h','4h','5h','6h'].includes(_fsTf)) _fsTf = '5m';
-
   document.getElementById('fsOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
   document.getElementById('fsTitle').textContent = sym;
-  renderFsTfBar(isDaily);
+  renderFsTfBar();
   renderFsChart();
 }
 
-function renderFsTfBar(isDaily) {
+function renderFsTfBar() {
   const bar = document.getElementById('fsTfBar');
   bar.innerHTML = FS_TIMEFRAMES.map(tf => {
-    const avail = isDaily ? tf.type === 'daily' : tf.type === 'intra';
     const active = tf.key === _fsTf;
-    return `<button class="tf-btn${active ? ' active' : ''}${!avail ? ' disabled' : ''}" onclick="setFsTf('${tf.key}')">${tf.label}</button>`;
+    return `<button class="tf-btn${active ? ' active' : ''}" onclick="setFsTf('${tf.key}')">${tf.label}</button>`;
   }).join('');
 }
 
 function setFsTf(key) {
   _fsTf = key;
-  const e = candleCache.get(_fsSym);
-  const isDaily = e && e.interval === 'day';
-  renderFsTfBar(isDaily);
+  renderFsTfBar();
   renderFsChart();
 }
 
@@ -1574,10 +1565,9 @@ function renderFsChart() {
   const e = candleCache.get(_fsSym);
   if (!e || !e.candles || !e.candles.length) return;
   const raw = e.candles;
-  const isDaily = e.interval === 'day';
-  const tf = FS_TIMEFRAMES.find(t => t.key === _fsTf) || FS_TIMEFRAMES[1];
-  const candles = aggregateCandles(raw, tf.mins);
-  const useDaily = tf.type === 'daily';
+  const tf = FS_TIMEFRAMES.find(t => t.key === _fsTf) || FS_TIMEFRAMES[9];
+  const candles = tf.range > 0 ? raw.slice(-tf.range) : raw;
+  const useDaily = e.interval === 'day';
   const n = candles.length;
   if (!n) return;
 
