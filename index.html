@@ -280,6 +280,15 @@
     .fs-close:hover { background: var(--bg3); color: var(--text1); border-color: var(--border3); }
     .fs-body { flex: 1; overflow: hidden; padding: 0; }
     .fs-body svg { display: block; width: 100%; height: 100%; }
+    .tf-btn {
+      font-family: var(--font-display); font-size: 12px; font-weight: 600;
+      padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--text2); cursor: pointer; white-space: nowrap;
+      transition: all .15s;
+    }
+    .tf-btn:hover { background: var(--bg3); color: var(--text1); border-color: var(--border2); }
+    .tf-btn.active { background: var(--cyan); color: #000; border-color: var(--cyan); }
+    .tf-btn.disabled { opacity: .3; pointer-events: none; }
   </style>
 </head>
 <body class="dark text-slate-200 min-h-screen font-sans antialiased">
@@ -293,6 +302,7 @@
       <button class="fs-close" onclick="closeFsGraph()" title="Close">&times;</button>
     </div>
   </div>
+  <div id="fsTfBar" class="flex items-center gap-1 px-4 py-2" style="border-bottom:1px solid var(--border);background:var(--bg2);overflow-x:auto"></div>
   <div class="fs-body" id="fsBody"></div>
 </div>
 
@@ -1507,21 +1517,70 @@ function toggleGraph() {
   saveState();
 }
 
+let _fsSym = null, _fsTf = '5m';
+const FS_TIMEFRAMES = [
+  { key: '1m',  label: '1m',   mins: 1,   type: 'intra' },
+  { key: '5m',  label: '5m',   mins: 5,   type: 'intra' },
+  { key: '10m', label: '10m',  mins: 10,  type: 'intra' },
+  { key: '30m', label: '30m',  mins: 30,  type: 'intra' },
+  { key: '1h',  label: '1H',   mins: 60,  type: 'intra' },
+  { key: '2h',  label: '2H',   mins: 120, type: 'intra' },
+  { key: '4h',  label: '4H',   mins: 240, type: 'intra' },
+  { key: '5h',  label: '5H',   mins: 300, type: 'intra' },
+  { key: '6h',  label: '6H',   mins: 360, type: 'intra' },
+  { key: '1d',  label: '1D',   mins: 1,   type: 'daily' },
+  { key: '1w',  label: '1W',   mins: 5,   type: 'daily' },
+  { key: '1mo', label: '1M',   mins: 22,  type: 'daily' },
+];
+
 function openFsGraph(sym) {
   if (!sym) sym = selectedSymbol;
   if (!sym) return;
   ensureCandles(sym);
-  const d = watchlist.get(sym);
   const e = candleCache.get(sym);
   const raw = e && e.candles;
   if (!raw || !raw.length) return;
 
-  const overlay = document.getElementById('fsOverlay');
-  document.getElementById('fsTitle').textContent = sym;
-
+  _fsSym = sym;
   const isDaily = e.interval === 'day';
-  const candles = isDaily ? raw : aggregateCandles(raw, 5);
+  if (isDaily) _fsTf = '1d';
+  else if (!['1m','5m','10m','30m','1h','2h','4h','5h','6h'].includes(_fsTf)) _fsTf = '5m';
+
+  document.getElementById('fsOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  document.getElementById('fsTitle').textContent = sym;
+  renderFsTfBar(isDaily);
+  renderFsChart();
+}
+
+function renderFsTfBar(isDaily) {
+  const bar = document.getElementById('fsTfBar');
+  bar.innerHTML = FS_TIMEFRAMES.map(tf => {
+    const avail = isDaily ? tf.type === 'daily' : tf.type === 'intra';
+    const active = tf.key === _fsTf;
+    return `<button class="tf-btn${active ? ' active' : ''}${!avail ? ' disabled' : ''}" onclick="setFsTf('${tf.key}')">${tf.label}</button>`;
+  }).join('');
+}
+
+function setFsTf(key) {
+  _fsTf = key;
+  const e = candleCache.get(_fsSym);
+  const isDaily = e && e.interval === 'day';
+  renderFsTfBar(isDaily);
+  renderFsChart();
+}
+
+function renderFsChart() {
+  const e = candleCache.get(_fsSym);
+  if (!e || !e.candles || !e.candles.length) return;
+  const raw = e.candles;
+  const isDaily = e.interval === 'day';
+  const tf = FS_TIMEFRAMES.find(t => t.key === _fsTf) || FS_TIMEFRAMES[1];
+  const candles = aggregateCandles(raw, tf.mins);
+  const useDaily = tf.type === 'daily';
   const n = candles.length;
+  if (!n) return;
+
   const first = candles[0][1], last = candles[n - 1][4];
   const dayUp = last >= first;
   const chg = last - first;
@@ -1564,17 +1623,17 @@ function openFsGraph(sym) {
   }
 
   const grid = [hi, lo + span * 0.75, lo + span * 0.5, lo + span * 0.25, lo];
-  const lbl = ts => isDaily
+  const lbl = ts => useDaily
     ? new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
     : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
   const fmtVol = v => { if (v >= 1e7) return (v/1e7).toFixed(1)+'Cr'; if (v >= 1e5) return (v/1e5).toFixed(1)+'L'; if (v >= 1e3) return (v/1e3).toFixed(0)+'K'; return String(Math.round(v)); };
 
   const tLabels = [0, Math.floor(n * 0.25), Math.floor(n * 0.5), Math.floor(n * 0.75), n - 1];
 
-  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap: gap2, lo, hi, span, W, H, n, isDaily, hasVol, volBase };
+  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap: gap2, lo, hi, span, W, H, n, isDaily: useDaily, hasVol, volBase };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
-  const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" data-chart="${chartData}" style="cursor:crosshair" xmlns="http://www.w3.org/2000/svg">
+  document.getElementById('fsBody').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" data-chart="${chartData}" style="cursor:crosshair" xmlns="http://www.w3.org/2000/svg">
     ${grid.map(v => `
       <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1c1c24" stroke-dasharray="4,4"/>
       <text x="${W - P.r + 8}" y="${(y(v) + 4).toFixed(1)}" fill="#9898a8" font-size="12" font-family="Roboto, sans-serif">${fmt(v)}</text>`).join('')}
@@ -1599,10 +1658,6 @@ function openFsGraph(sym) {
       </g>
     </g>
   </svg>`;
-
-  document.getElementById('fsBody').innerHTML = svg;
-  overlay.classList.add('open');
-  document.body.style.overflow = 'hidden';
 }
 
 function closeFsGraph() {
