@@ -440,6 +440,41 @@ def get_quote(instrument_key):
     return result
 
 
+_PREVCLOSE_CACHE = {}
+_PREVCLOSE_TTL = 300.0  # prev close is fixed for the whole trading day
+
+
+def get_prev_close(instrument_key):
+    """The close of the LAST COMPLETED trading session (i.e. the "1D" baseline
+    brokers use).
+
+    The market-quote `close_price` is unreliable: after the close it flips to
+    TODAY's close, which would make the day's change collapse to zero. So we
+    read daily historical candles and take the most recent session that is not
+    today.
+    """
+    now = time.time()
+    hit = _PREVCLOSE_CACHE.get(instrument_key)
+    if hit and (now - hit[0]) < _PREVCLOSE_TTL:
+        return hit[1]
+    prev = 0.0
+    try:
+        enc = urllib.parse.quote(instrument_key, safe="")
+        to = datetime.date.today()
+        frm = to - datetime.timedelta(days=15)
+        data = _get(f"/v2/historical-candle/{enc}/day/{to}/{frm}", {}).get("data", {}) or {}
+        candles = data.get("candles") or []  # newest-first: [ts,o,h,l,c,v,oi]
+        today = str(datetime.date.today())
+        for c in candles:
+            if str(c[0])[:10] != today:   # skip today's (in-progress/just-closed) bar
+                prev = float(c[4])
+                break
+    except Exception:
+        prev = 0.0
+    _PREVCLOSE_CACHE[instrument_key] = (now, prev)
+    return prev
+
+
 def _leg(opt):
     opt = opt or {}
     md = opt.get("market_data") or {}
@@ -535,7 +570,7 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
     rows = live or rows
 
     quote = get_quote(instrument_key)
-    prev_close = quote["close_price"] or spot
+    prev_close = get_prev_close(instrument_key) or quote["close_price"] or spot
 
     analytics = _compute_analytics(rows, spot)
     return {
@@ -551,7 +586,7 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
 def build_synthetic_chain(symbol, instrument_key):
     quote = get_quote(instrument_key)
     spot = quote["last_price"] or get_ltp(instrument_key)
-    prev_close = quote["close_price"] or spot
+    prev_close = get_prev_close(instrument_key) or quote["close_price"] or spot
     if spot >= 20000:
         step = 100
     elif spot >= 5000:
@@ -667,9 +702,9 @@ def get_candles(symbol):
 
     # Upstox returns newest-first: [ts, open, high, low, close, volume, oi]
     candles = [[c[0], c[1], c[2], c[3], c[4], c[5] if len(c) > 5 else 0] for c in reversed(candles)]
-    # Authoritative previous-day close from the market quote (not today's open).
-    quote = get_quote(instrument_key)
-    prev_close = round(quote.get("close_price") or 0, 2)
+    # Previous-session close (the 1D baseline) from daily history, not the
+    # market quote's close_price (which flips to today's close after the bell).
+    prev_close = round(get_prev_close(instrument_key) or 0, 2)
     return {"type": "candles", "symbol": symbol, "interval": interval,
             "prev_close": prev_close, "candles": candles}
 

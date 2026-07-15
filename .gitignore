@@ -3,3 +3,4 @@ __pycache__/
 .vercel
 .env
 .DS_Store
+.upstox_token
