@@ -505,11 +505,13 @@
 const IS_REMOTE = !['localhost','127.0.0.1',''].includes(location.hostname);
 
 // The live data function (/api/chain) only exists on the Vercel deployment.
-// When the page is opened locally (static preview, no backend), fall back to
-// the deployed API — it sends `Access-Control-Allow-Origin: *`, so the
-// cross-origin request works. Change PROD_API if you rename the deployment.
+// When the page is opened locally with a plain static server, fall back to the
+// deployed API (it sends `Access-Control-Allow-Origin: *`). But if you run the
+// bundled `local_server.py` (static + /api on one origin), open the page with
+// ?api=local to use that fully-local backend instead — no remote dependency.
 const PROD_API = 'https://market-options-screener.vercel.app';
-const API_BASE = IS_REMOTE ? '' : PROD_API;
+const _apiMode = new URLSearchParams(location.search).get('api');
+const API_BASE = IS_REMOTE ? '' : (_apiMode === 'local' ? '' : PROD_API);
 
 const watchlist = new Map();   // symbol -> { spot, prevClose, expiry, expiries, rows, cashOnly, lastSpot, loading, error }
 let selectedSymbol = null;
