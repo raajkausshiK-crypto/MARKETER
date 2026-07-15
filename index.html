@@ -414,10 +414,16 @@
       <span id="viewToolbarTitle" class="label">Option Chains</span>
       <span id="stockCount" class="ml-2 text-[11px] normal-case font-normal" style="color:var(--text3)"></span>
     </div>
-    <div class="toggle-group">
-      <button id="viewSingleBtn" onclick="setViewMode('single')" class="toggle-btn">Single</button>
-      <button id="viewQuadBtn" onclick="setViewMode('quad')" class="toggle-btn">Quad &middot; 4</button>
-      <button id="viewScreenerBtn" onclick="setViewMode('screener')" class="toggle-btn">Screener</button>
+    <div class="flex items-center gap-2">
+      <button id="removeSelectedBtn" onclick="removeSelected()" title="Remove the selected stock"
+        class="tool-btn text-[11px] px-3 py-1.5" style="color:var(--text2)">&#10005; Remove</button>
+      <button id="clearAllBtn" onclick="clearAllStocks()" title="Remove all stocks"
+        class="tool-btn text-[11px] px-3 py-1.5" style="color:var(--red)">Clear all</button>
+      <div class="toggle-group">
+        <button id="viewSingleBtn" onclick="setViewMode('single')" class="toggle-btn">Single</button>
+        <button id="viewQuadBtn" onclick="setViewMode('quad')" class="toggle-btn">Quad &middot; 4</button>
+        <button id="viewScreenerBtn" onclick="setViewMode('screener')" class="toggle-btn">Screener</button>
+      </div>
     </div>
   </div>
 
@@ -792,6 +798,34 @@ function removeWatchlistItem(sym, e) {
   unhighlightChip(sym);
   saveState();
   if (!watchlist.size) document.getElementById('emptyState').classList.remove('hidden');
+}
+
+function removeSelected() {
+  if (!selectedSymbol) {
+    toast(watchlist.size ? 'No stock selected — click a card first' : 'No stocks to remove', 'info');
+    return;
+  }
+  const sym = selectedSymbol;
+  removeWatchlistItem(sym);
+  toast(`${sym} removed`, 'info');
+}
+
+function clearAllStocks() {
+  if (!watchlist.size) { toast('Nothing to clear', 'info'); return; }
+  if (!confirm(`Remove all ${watchlist.size} stock${watchlist.size > 1 ? 's' : ''} from the screen?`)) return;
+  watchlist.clear();
+  selectedSymbol = null;
+  hideDetail();
+  quadSlots = [null, null, null, null];
+  quadMembershipSig = '';
+  for (const k of Object.keys(paneCharts)) delete paneCharts[k];
+  renderCards();
+  if (viewMode === 'quad') renderQuad();
+  else if (viewMode === 'screener') renderScreener();
+  renderCategories();
+  saveState();
+  document.getElementById('emptyState').classList.remove('hidden');
+  toast('All stocks cleared', 'info');
 }
 
 function selectSymbol(sym) {
