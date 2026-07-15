@@ -390,6 +390,8 @@
         <div class="flex gap-2">
           <input id="searchInput" type="text" placeholder="Type symbol e.g. RELIANCE, NIFTY..."
             class="flex-1 input-dark px-3.5 py-2.5 text-sm uppercase" style="font-family:var(--font-mono)">
+          <button onclick="saveTypedToWatchlist()" title="Save typed symbol to your watchlist"
+            class="tool-btn whitespace-nowrap px-3 py-2.5" style="color:var(--cyan)">&#9733; Save</button>
           <button onclick="addWatchlistItem()" class="btn-primary whitespace-nowrap">+ Add</button>
         </div>
       </div>
@@ -2035,24 +2037,71 @@ const CATEGORIES = {
 };
 let activeCat = 'Indices';
 
+// ---- Saved watchlist (personal favorites, persisted) ----
+const WL_CAT = '★ Watchlist';
+let savedWatchlist = [];
+try { savedWatchlist = JSON.parse(localStorage.getItem('savedWatchlist') || '[]'); } catch { savedWatchlist = []; }
+function persistSavedWatchlist() { localStorage.setItem('savedWatchlist', JSON.stringify(savedWatchlist)); }
+function isSaved(sym) { return savedWatchlist.includes(sym); }
+function toggleSaved(sym, ev) {
+  if (ev) ev.stopPropagation();
+  if (isSaved(sym)) {
+    savedWatchlist = savedWatchlist.filter(s => s !== sym);
+    toast(`${sym} removed from watchlist`, 'info');
+  } else {
+    savedWatchlist.push(sym);
+    toast(`${sym} added to watchlist`, 'success');
+  }
+  persistSavedWatchlist();
+  renderCategories();
+}
+function saveTypedToWatchlist() {
+  const inp = document.getElementById('searchInput');
+  const sym = (inp.value || '').trim().toUpperCase();
+  if (!sym) { toast('Type a symbol first', 'info'); return; }
+  if (isSaved(sym)) { toast(`${sym} is already in your watchlist`, 'info'); return; }
+  savedWatchlist.push(sym);
+  persistSavedWatchlist();
+  inp.value = '';
+  toast(`${sym} added to watchlist`, 'success');
+  renderCategories();
+}
+
 function renderCategories() {
   const tabsEl = document.getElementById('catTabs');
   const stocksEl = document.getElementById('catStocks');
-  tabsEl.innerHTML = Object.keys(CATEGORIES).map(cat =>
-    `<button onclick="selectCategory('${cat}')"
-       class="cat-chip ${cat === activeCat ? 'active' : ''}">${cat}</button>`
+  const cats = [WL_CAT, ...Object.keys(CATEGORIES)];
+  tabsEl.innerHTML = cats.map(cat =>
+    `<button onclick="selectCategory('${cat.replace(/'/g, "\\'")}')"
+       class="cat-chip ${cat === activeCat ? 'active' : ''}"${cat === WL_CAT ? ' style="color:var(--cyan)"' : ''}>${cat}</button>`
   ).join('');
 
-  const syms = CATEGORIES[activeCat] || [];
+  const syms = activeCat === WL_CAT ? savedWatchlist : (CATEGORIES[activeCat] || []);
+  if (activeCat === WL_CAT && syms.length === 0) {
+    stocksEl.innerHTML = `<span class="text-[11px]" style="color:var(--text3)">No saved stocks yet — tap the &#9734; on any stock below, or type a symbol and click &#9733; Save.</span>`;
+    return;
+  }
   stocksEl.innerHTML = syms.map(sym => {
     const inWL = watchlist.has(sym);
-    return `<button onclick="addWatchlistItem('${sym}')"
-      class="stock-chip ${inWL ? 'active' : ''}">${sym}</button>`;
+    const saved = isSaved(sym);
+    return `<span class="stock-chip ${inWL ? 'active' : ''}" style="display:inline-flex;align-items:center;gap:4px;padding:0 6px 0 0">` +
+      `<button onclick="addWatchlistItem('${sym}')" title="Add to screen" style="background:none;border:0;color:inherit;font:inherit;cursor:pointer;padding:4px 2px 4px 10px">${sym}</button>` +
+      `<button onclick="toggleSaved('${sym}',event)" title="${saved ? 'Remove from watchlist' : 'Add to watchlist'}" style="background:none;border:0;cursor:pointer;font-size:12px;line-height:1;color:${saved ? 'var(--cyan)' : 'var(--text3)'}">${saved ? '★' : '☆'}</button>` +
+      `</span>`;
   }).join('');
 }
 
 function selectCategory(cat) {
   const prevCat = activeCat;
+
+  // The Watchlist tab is a non-destructive quick-add palette: it never bulk
+  // swaps the on-screen stocks the way the sector categories do.
+  if (cat === WL_CAT) {
+    activeCat = cat;
+    renderCategories();
+    return;
+  }
+
   activeCat = cat;
 
   if (prevCat !== cat) {
