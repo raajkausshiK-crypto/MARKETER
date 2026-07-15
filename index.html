@@ -863,7 +863,8 @@ function onDataUpdated(sym) {
 function updateFsPrice() {
   const d = watchlist.get(_fsSym);
   if (!d || !d.spot) return;
-  const base = d.prevClose || d.lastSpot;
+  // Change is measured against the previous day's close, not the last tick.
+  const base = d.prevClose || 0;
   const price = d.spot;
   const chg = base ? price - base : 0;
   const chgPct = base ? (chg / base) * 100 : 0;
@@ -1082,7 +1083,12 @@ function renderCards() {
 // re-triggered animation and no flicker.
 function updateCard(el, sym, d) {
   const selected = sym === selectedSymbol;
-  const base = d.prevClose || d.lastSpot;
+  // P&L is always measured against the PREVIOUS DAY's close, never the last
+  // tick or today's open. If prevClose hasn't arrived yet, kick off a fetch
+  // and show a flat 0 rather than a misleading tick-to-tick delta.
+  const prevClose = d.prevClose || 0;
+  if (!prevClose && !_prevCloseLoaded.has(sym)) fetchPrevClose(sym);
+  const base = prevClose;
   const change = base && d.spot ? d.spot - base : 0;
   const isUp = change >= 0;
   el.classList.toggle('card-selected', selected);
@@ -1104,7 +1110,7 @@ function updateCard(el, sym, d) {
 
   body.innerHTML =
     `<div class="price-big mt-1.5 ${up?'price-green':'price-red'}">${fmt(d.spot)}</div>` +
-    `<div class="text-[10px] tabular-nums font-semibold mt-0.5" style="font-family:var(--font-mono);color:${up?'var(--green)':'var(--red)'}">${up?'+':''}${fmt(change)} (${up?'+':''}${changePct.toFixed(2)}%)</div>` +
+    `<div class="text-[10px] tabular-nums font-semibold mt-0.5" style="font-family:var(--font-mono);color:${up?'var(--green)':'var(--red)'}" title="P&amp;L vs previous close">${up?'+':''}${fmt(change)} (${up?'+':''}${changePct.toFixed(2)}%) vs prev</div>` +
     `<div class="flex gap-3 mt-2" style="font-family:var(--font-display);font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--text1)">` +
       `<span title="Max Call OI" style="color:var(--green)">C: ${fmtOI(maxCallOI)}</span>` +
       `<span title="Max Put OI" style="color:var(--red)">P: ${fmtOI(maxPutOI)}</span>` +
@@ -1115,7 +1121,7 @@ function updateCard(el, sym, d) {
       `<span>O:<b style="color:var(--text2)">${fmt(d.dayOpen||0)}</b></span>` +
       `<span>H:<b style="color:var(--green)">${fmt(d.dayHigh||0)}</b></span>` +
       `<span>L:<b style="color:var(--red)">${fmt(d.dayLow||0)}</b></span>` +
-      `<span>C:<b style="color:var(--text2)">${fmt(d.spot||0)}</b></span>` +
+      `<span title="Previous day close">PC:<b style="color:var(--amber)">${fmt(prevClose)}</b></span>` +
     `</div>`;
 }
 
@@ -1239,7 +1245,7 @@ function fillChainPane(pane, sym) {
   const d = watchlist.get(sym);
   if (spotEl) {
     spotEl.textContent = d.spot ? fmt(d.spot) : (d.loading ? 'Loading…' : '');
-    const detailBase = d.prevClose || d.lastSpot;
+    const detailBase = d.prevClose || 0;
     spotEl.className = 'text-sm font-bold tabular-nums truncate ' +
       ((detailBase && d.spot && d.spot < detailBase) ? 'text-rose-400' : 'text-emerald-400');
   }
