@@ -421,13 +421,18 @@ def get_quote(instrument_key):
     hit = _QUOTE_CACHE.get(instrument_key)
     if hit and (now - hit[0]) < _QUOTE_TTL:
         return hit[1]
-    result = {"last_price": 0.0, "close_price": 0.0}
+    result = {"last_price": 0.0, "close_price": 0.0, "open": 0.0, "high": 0.0, "low": 0.0, "volume": 0}
     try:
         data = _get("/v2/market-quote/quotes", {"instrument_key": instrument_key}).get("data", {}) or {}
         for v in data.values():
             if isinstance(v, dict):
                 result["last_price"] = float(v.get("last_price") or 0)
                 result["close_price"] = float(v.get("close_price") or 0)
+                ohlc = v.get("ohlc") or {}
+                result["open"] = float(ohlc.get("open") or 0)
+                result["high"] = float(ohlc.get("high") or 0)
+                result["low"] = float(ohlc.get("low") or 0)
+                result["volume"] = int(v.get("volume") or 0)
                 break
     except Exception:
         pass
@@ -536,6 +541,8 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
     return {
         "type": "chain", "symbol": symbol, "spot": round(spot, 2),
         "prev_close": round(prev_close, 2),
+        "open": quote.get("open", 0), "high": quote.get("high", 0),
+        "low": quote.get("low", 0), "volume": quote.get("volume", 0),
         "expiry": expiry, "expiries": expiries, "rows": rows,
         **analytics,
     }
@@ -575,6 +582,8 @@ def build_synthetic_chain(symbol, instrument_key):
     return {
         "type": "chain", "symbol": symbol, "spot": round(spot, 2),
         "prev_close": round(prev_close, 2),
+        "open": quote.get("open", 0), "high": quote.get("high", 0),
+        "low": quote.get("low", 0), "volume": quote.get("volume", 0),
         "expiry": "CASH (no options)", "expiries": ["CASH (no options)"],
         "rows": rows, "cash_only": True,
     }
