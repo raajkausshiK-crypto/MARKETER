@@ -2150,7 +2150,7 @@ function renderCategories() {
   const wlActions = activeCat === WL_CAT
     ? `<button onclick="addAllWatchlist()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Load all saved stocks onto the screen">&#43; Add all</button>` +
       `<button onclick="clearWatchlist()" class="stock-chip" style="color:var(--red)" title="Empty your watchlist">Clear list</button>`
-    : '';
+    : `<button onclick="addAllInCategory()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Add all ${activeCat} stocks to the screen">&#43; Add all ${activeCat}</button>`;
   stocksEl.innerHTML = wlActions + syms.map(sym => {
     const inWL = watchlist.has(sym);
     const saved = isSaved(sym);
@@ -2162,51 +2162,34 @@ function renderCategories() {
 }
 
 function selectCategory(cat) {
-  const prevCat = activeCat;
-
-  // The Watchlist tab is a non-destructive quick-add palette: it never bulk
-  // swaps the on-screen stocks the way the sector categories do.
-  if (cat === WL_CAT) {
-    activeCat = cat;
-    renderCategories();
-    return;
-  }
-
+  // Selecting a category (sector or Watchlist) only changes which chips are
+  // shown to pick from — it never bulk-loads stocks onto the screen. Stocks
+  // appear only when you explicitly add them (chip, + Add, or Add all).
   activeCat = cat;
-
-  if (prevCat !== cat) {
-    // Remove stocks that belonged to the previous category
-    const prevSyms = CATEGORIES[prevCat] || [];
-    prevSyms.forEach(sym => {
-      if (watchlist.has(sym)) {
-        watchlist.delete(sym);
-        if (selectedSymbol === sym) selectedSymbol = null;
-        delete paneCharts['s:' + sym];
-        unhighlightChip(sym);
-      }
-    });
-
-    // Add all stocks from the new category
-    const newSyms = CATEGORIES[cat] || [];
-    newSyms.forEach(sym => {
-      if (!watchlist.has(sym)) {
-        watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
-      }
-    });
-
-    if (!selectedSymbol && newSyms.length) selectedSymbol = newSyms[0];
-    quadSlots = quadSlots.map(s => (s && watchlist.has(s)) ? s : null);
-    quadMembershipSig = '';
-
-    renderCards();
-    saveState();
-    if (connected) startAllPolling();
-    if (viewMode === 'single') renderDetail();
-    else if (viewMode === 'quad') renderQuad();
-    else if (viewMode === 'screener') renderScreener();
-  }
-
   renderCategories();
+}
+
+// Optional convenience: load every stock in the active sector at once.
+function addAllInCategory() {
+  const syms = CATEGORIES[activeCat] || [];
+  if (!syms.length) return;
+  let added = 0;
+  syms.forEach(sym => {
+    if (!watchlist.has(sym)) {
+      watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+      added++;
+    }
+  });
+  if (!selectedSymbol && syms.length) selectedSymbol = syms[0];
+  renderCards();
+  saveState();
+  if (connected) startAllPolling();
+  else syms.forEach(sym => fetchChain(sym));
+  if (viewMode === 'single') renderDetail();
+  else if (viewMode === 'quad') renderQuad();
+  else if (viewMode === 'screener') renderScreener();
+  renderCategories();
+  toast(added ? `Added ${added} ${activeCat} stock${added > 1 ? 's' : ''}` : `All ${activeCat} stocks already on screen`, 'success');
 }
 
 function highlightChip(sym) { renderCategories(); }
