@@ -2101,6 +2101,38 @@ function saveTypedToWatchlist() {
   renderCategories();
 }
 
+// Load every saved symbol onto the screen at once.
+function addAllWatchlist() {
+  if (!savedWatchlist.length) { toast('Your watchlist is empty', 'info'); return; }
+  let added = 0;
+  savedWatchlist.forEach(sym => {
+    if (!watchlist.has(sym)) {
+      watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
+      added++;
+    }
+  });
+  if (!selectedSymbol && savedWatchlist.length) selectedSymbol = savedWatchlist[0];
+  renderCards();
+  saveState();
+  if (connected) startAllPolling();
+  else savedWatchlist.forEach(sym => fetchChain(sym));
+  if (viewMode === 'single') renderDetail();
+  else if (viewMode === 'quad') renderQuad();
+  else if (viewMode === 'screener') renderScreener();
+  renderCategories();
+  toast(added ? `Added ${added} stock${added > 1 ? 's' : ''} from watchlist` : 'All watchlist stocks are already on screen', 'success');
+}
+
+// Empty the saved watchlist (does not touch on-screen stocks).
+function clearWatchlist() {
+  if (!savedWatchlist.length) { toast('Watchlist already empty', 'info'); return; }
+  if (!confirm(`Clear your watchlist (${savedWatchlist.length} saved)?`)) return;
+  savedWatchlist = [];
+  persistSavedWatchlist();
+  renderCategories();
+  toast('Watchlist cleared', 'info');
+}
+
 function renderCategories() {
   const tabsEl = document.getElementById('catTabs');
   const stocksEl = document.getElementById('catStocks');
@@ -2115,7 +2147,11 @@ function renderCategories() {
     stocksEl.innerHTML = `<span class="text-[11px]" style="color:var(--text3)">No saved stocks yet — tap the &#9734; on any stock below, or type a symbol and click &#9733; Save.</span>`;
     return;
   }
-  stocksEl.innerHTML = syms.map(sym => {
+  const wlActions = activeCat === WL_CAT
+    ? `<button onclick="addAllWatchlist()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Load all saved stocks onto the screen">&#43; Add all</button>` +
+      `<button onclick="clearWatchlist()" class="stock-chip" style="color:var(--red)" title="Empty your watchlist">Clear list</button>`
+    : '';
+  stocksEl.innerHTML = wlActions + syms.map(sym => {
     const inWL = watchlist.has(sym);
     const saved = isSaved(sym);
     return `<span class="stock-chip ${inWL ? 'active' : ''}" style="display:inline-flex;align-items:center;gap:4px;padding:0 6px 0 0">` +
