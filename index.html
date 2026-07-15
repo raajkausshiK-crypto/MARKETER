@@ -834,13 +834,19 @@ async function fetchPrevClose(sym) {
     const res = await fetch(url, { cache:'no-store' });
     const data = await res.json();
     const candles = data.candles || [];
-    if (!candles.length) return;
     const entry = watchlist.get(sym);
     if (!entry) return;
-    if (data.interval === 'day' && candles.length >= 2) {
-      entry.prevClose = candles[candles.length - 1][4];
-    } else if (data.interval === '1minute' && candles.length) {
-      entry.prevClose = candles[0][1];
+    // 1) Authoritative previous-day close from the market quote.
+    if (data.prev_close) {
+      entry.prevClose = data.prev_close;
+    } else if (data.interval === 'day' && candles.length) {
+      // Daily candles are chronological; the last one that is NOT today is the
+      // previous session's close. (Intraday 1-minute candles are useless here —
+      // candles[0] is TODAY's open, not the previous close.)
+      const today = new Date().toISOString().slice(0, 10);
+      let i = candles.length - 1;
+      while (i >= 0 && String(candles[i][0]).slice(0, 10) === today) i--;
+      if (i >= 0) entry.prevClose = candles[i][4];
     }
     if (entry.prevClose) onDataUpdated(sym);
   } catch {}

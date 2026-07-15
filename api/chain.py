@@ -667,7 +667,11 @@ def get_candles(symbol):
 
     # Upstox returns newest-first: [ts, open, high, low, close, volume, oi]
     candles = [[c[0], c[1], c[2], c[3], c[4], c[5] if len(c) > 5 else 0] for c in reversed(candles)]
-    return {"type": "candles", "symbol": symbol, "interval": interval, "candles": candles}
+    # Authoritative previous-day close from the market quote (not today's open).
+    quote = get_quote(instrument_key)
+    prev_close = round(quote.get("close_price") or 0, 2)
+    return {"type": "candles", "symbol": symbol, "interval": interval,
+            "prev_close": prev_close, "candles": candles}
 
 
 def get_candles_cached(symbol):
