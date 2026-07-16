@@ -2252,6 +2252,7 @@ function renderCategories() {
     ? `<button onclick="showWatchlistOnly()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Show only your watchlist on screen (removes anything else)">Show watchlist</button>` +
       `<button onclick="clearWatchlist()" class="stock-chip" style="color:var(--red)" title="Empty your watchlist">Clear list</button>`
     : `<button onclick="addAllInCategory()" class="stock-chip" style="background:var(--cyan);color:var(--on-accent);border-color:var(--cyan);font-weight:700" title="Add all ${syms.length} ${activeCat} stocks to the screen">&#43; Add all ${activeCat} (${syms.length})</button>` +
+      `<button onclick="removeAllInCategory()" class="stock-chip" style="color:var(--red)" title="Remove all ${activeCat} stocks from the screen">&#10005; Remove all</button>` +
       `<button onclick="saveAllInCategory()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Save all ${activeCat} stocks to your watchlist">&#9733; Save all</button>`;
   stocksEl.innerHTML = wlActions + syms.map(sym => {
     const inWL = watchlist.has(sym);
@@ -2292,6 +2293,30 @@ function addAllInCategory() {
   else if (viewMode === 'screener') renderScreener();
   renderCategories();
   toast(added ? `Added ${added} ${activeCat} stock${added > 1 ? 's' : ''}` : `All ${activeCat} stocks already on screen`, 'success');
+}
+
+// Remove every stock in the active category from the screen.
+function removeAllInCategory() {
+  const syms = CATEGORIES[activeCat] || [];
+  let removed = 0;
+  syms.forEach(sym => {
+    if (watchlist.has(sym)) {
+      watchlist.delete(sym);
+      delete paneCharts['s:' + sym];
+      if (selectedSymbol === sym) selectedSymbol = null;
+      removed++;
+    }
+  });
+  quadSlots = quadSlots.map(s => (s && watchlist.has(s)) ? s : null);
+  quadMembershipSig = '';
+  renderCards();
+  saveState();
+  if (viewMode === 'single') renderDetail();
+  else if (viewMode === 'quad') renderQuad();
+  else if (viewMode === 'screener') renderScreener();
+  renderCategories();
+  if (!watchlist.size) document.getElementById('emptyState').classList.remove('hidden');
+  toast(removed ? `Removed ${removed} ${activeCat} stock${removed > 1 ? 's' : ''}` : `No ${activeCat} stocks on screen`, 'info');
 }
 
 // Save every stock in the active category to the watchlist (star them all).
