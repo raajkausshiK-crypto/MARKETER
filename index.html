@@ -2101,17 +2101,27 @@ function saveTypedToWatchlist() {
   renderCategories();
 }
 
-// Load every saved symbol onto the screen at once.
-function addAllWatchlist() {
-  if (!savedWatchlist.length) { toast('Your watchlist is empty', 'info'); return; }
-  let added = 0;
+// Show EXACTLY the saved watchlist on screen: drop anything that isn't in it,
+// then load any saved symbols that aren't showing yet. This guarantees the
+// screen matches the watchlist — no leftover stocks from other categories.
+function showWatchlistOnly() {
+  if (!savedWatchlist.length) { toast('Your watchlist is empty — star some stocks first', 'info'); return; }
+  const keep = new Set(savedWatchlist);
+  [...watchlist.keys()].forEach(sym => {
+    if (!keep.has(sym)) {
+      watchlist.delete(sym);
+      delete paneCharts['s:' + sym];
+      if (selectedSymbol === sym) selectedSymbol = null;
+    }
+  });
   savedWatchlist.forEach(sym => {
     if (!watchlist.has(sym)) {
       watchlist.set(sym, { spot:0, prevClose:0, expiry:null, expiries:[], rows:[], cashOnly:false, lastSpot:0, loading:true, error:null });
-      added++;
     }
   });
-  if (!selectedSymbol && savedWatchlist.length) selectedSymbol = savedWatchlist[0];
+  if (!selectedSymbol) selectedSymbol = savedWatchlist[0];
+  quadSlots = quadSlots.map(s => (s && watchlist.has(s)) ? s : null);
+  quadMembershipSig = '';
   renderCards();
   saveState();
   if (connected) startAllPolling();
@@ -2120,7 +2130,7 @@ function addAllWatchlist() {
   else if (viewMode === 'quad') renderQuad();
   else if (viewMode === 'screener') renderScreener();
   renderCategories();
-  toast(added ? `Added ${added} stock${added > 1 ? 's' : ''} from watchlist` : 'All watchlist stocks are already on screen', 'success');
+  toast(`Showing your watchlist · ${savedWatchlist.length} stock${savedWatchlist.length > 1 ? 's' : ''}`, 'success');
 }
 
 // Empty the saved watchlist (does not touch on-screen stocks).
@@ -2148,7 +2158,7 @@ function renderCategories() {
     return;
   }
   const wlActions = activeCat === WL_CAT
-    ? `<button onclick="addAllWatchlist()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Load all saved stocks onto the screen">&#43; Add all</button>` +
+    ? `<button onclick="showWatchlistOnly()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Show only your watchlist on screen (removes anything else)">Show watchlist</button>` +
       `<button onclick="clearWatchlist()" class="stock-chip" style="color:var(--red)" title="Empty your watchlist">Clear list</button>`
     : `<button onclick="addAllInCategory()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Add all ${activeCat} stocks to the screen">&#43; Add all ${activeCat}</button>`;
   stocksEl.innerHTML = wlActions + syms.map(sym => {
