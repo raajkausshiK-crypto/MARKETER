@@ -46,9 +46,9 @@
       --font-mono: 'Roboto', system-ui, -apple-system, sans-serif;
     }
     :root[data-theme="light"] {
-      --bg: #f4f1ea; --bg2: #ffffff; --bg3: #f7f4ed;
-      --border: #e6e1d6; --border2: #d8d2c3; --border3: #c6bfad;
-      --text1: #1b1a17; --text2: #5f5b52; --text3: #918c81;
+      --bg: #e5e0d3; --bg2: #f1ede2; --bg3: #e9e4d7;
+      --border: #d3ccbb; --border2: #c4bca8; --border3: #b0a892;
+      --text1: #1a1915; --text2: #56524a; --text3: #837d71;
       --accent-rgb: 166,124,24;                 /* deeper gold for light-bg contrast */
       --accent-hover: #8f6b12;
       --cyan: rgb(var(--accent-rgb));
@@ -229,6 +229,14 @@
     /* Selection */
     ::selection { background: rgba(var(--accent-rgb),.2); }
 
+    /* Screen dimmer (brightness control) — safe overlay, no filter side-effects */
+    #dimmer { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none;
+      z-index: 2147483000; transition: opacity .12s ease; }
+
+    /* Brightness slider */
+    .bright-ctl { display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; height: 36px; }
+    .bright-ctl input[type="range"] { width: 72px; accent-color: var(--cyan); cursor: pointer; }
+
     /* Separator */
     .sep { height: 1px; background: var(--border); }
 
@@ -374,6 +382,10 @@
         class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text2)">
         <span id="themeIcon">&#9790;</span>
       </button>
+      <div class="tool-btn bright-ctl" title="Brightness" style="color:var(--text3)">
+        <span style="font-size:13px">&#9728;</span>
+        <input id="brightnessSlider" type="range" min="55" max="100" value="100" oninput="setBrightness(this.value)">
+      </div>
       <button id="moversBtn" onclick="toggleMovers()" title="Top gainers &amp; losers"
         class="tool-btn text-[12px] font-semibold px-3 h-9 flex items-center gap-1.5" style="color:var(--text2)">
         <span>&#128200;</span> Movers
@@ -435,6 +447,7 @@
     </div>
   </section>
 
+  <div id="dimmer"></div>
   <div id="toastArea" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
 
   <!-- ===== WATCHLIST CARDS ===== -->
@@ -601,6 +614,26 @@ function toggleTheme() {
   applyThemeIcon();
 }
 applyThemeIcon();
+
+// ========================= BRIGHTNESS =========================
+// A fixed black overlay dims the whole screen (0–45%). Safe: no CSS filter, so
+// fixed elements / overlays keep working. Persisted across sessions.
+function setBrightness(val) {
+  const v = Math.max(55, Math.min(100, Number(val) || 100));
+  const dim = document.getElementById('dimmer');
+  if (dim) dim.style.opacity = ((100 - v) / 100).toFixed(3);
+  localStorage.setItem('brightness', String(v));
+}
+(function initBrightness() {
+  const saved = Number(localStorage.getItem('brightness')) || 100;
+  const apply = () => {
+    const slider = document.getElementById('brightnessSlider');
+    if (slider) slider.value = saved;
+    setBrightness(saved);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+  else apply();
+})();
 
 // ========================= TOP MOVERS =========================
 let _moversTimer = null;
