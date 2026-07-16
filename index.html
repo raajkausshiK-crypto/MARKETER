@@ -232,6 +232,14 @@
     /* Separator */
     .sep { height: 1px; background: var(--border); }
 
+    /* Mover row */
+    .mover-row {
+      width: 100%; display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg); margin-bottom: 4px; cursor: pointer; transition: all .12s ease;
+    }
+    .mover-row:hover { border-color: var(--border3); background: var(--bg3); }
+
     /* Logo */
     .logo-mark {
       width: 36px; height: 36px; border-radius: 10px;
@@ -366,6 +374,10 @@
         class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text2)">
         <span id="themeIcon">&#9790;</span>
       </button>
+      <button id="moversBtn" onclick="toggleMovers()" title="Top gainers &amp; losers"
+        class="tool-btn text-[12px] font-semibold px-3 h-9 flex items-center gap-1.5" style="color:var(--text2)">
+        <span>&#128200;</span> Movers
+      </button>
       <button id="restartBtn" onclick="restartConnection()" title="Restart live feed"
         class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text3)">
         &#8635;
@@ -399,6 +411,28 @@
     <div class="sep my-3"></div>
     <div id="catTabs" class="flex flex-wrap gap-1.5 mb-2"></div>
     <div id="catStocks" class="flex flex-wrap gap-1 max-h-[160px] overflow-y-auto pr-1"></div>
+  </section>
+
+  <!-- ===== TOP MOVERS ===== -->
+  <section id="moversPanel" class="hidden surface-raised rounded-2xl p-4 mb-5 fade-in">
+    <div class="flex items-center justify-between mb-3">
+      <span class="label">Top Movers <span id="moversUniverse" style="color:var(--text3)"></span></span>
+      <div class="flex items-center gap-2">
+        <span id="moversUpdated" class="text-[10px]" style="color:var(--text3)"></span>
+        <button onclick="fetchMovers()" title="Refresh" class="tool-btn w-8 h-8 flex items-center justify-center" style="color:var(--text3)">&#8635;</button>
+        <button onclick="toggleMovers()" title="Close" class="tool-btn w-8 h-8 flex items-center justify-center" style="color:var(--text3)">&#10005;</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2">
+      <div>
+        <div class="label mb-2" style="color:var(--green)">&#9650; Top Gainers</div>
+        <div id="moversGainers"><div class="text-[11px]" style="color:var(--text3)">Loading…</div></div>
+      </div>
+      <div>
+        <div class="label mb-2" style="color:var(--red)">&#9660; Top Losers</div>
+        <div id="moversLosers"><div class="text-[11px]" style="color:var(--text3)">Loading…</div></div>
+      </div>
+    </div>
   </section>
 
   <div id="toastArea" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
@@ -567,6 +601,58 @@ function toggleTheme() {
   applyThemeIcon();
 }
 applyThemeIcon();
+
+// ========================= TOP MOVERS =========================
+let _moversTimer = null;
+function toggleMovers() {
+  const p = document.getElementById('moversPanel');
+  const show = p.classList.contains('hidden');
+  p.classList.toggle('hidden', !show);
+  document.getElementById('moversBtn').classList.toggle('active', show);
+  if (show) {
+    fetchMovers();
+    _moversTimer = setInterval(fetchMovers, 45000);
+  } else if (_moversTimer) {
+    clearInterval(_moversTimer); _moversTimer = null;
+  }
+}
+async function fetchMovers() {
+  const g = document.getElementById('moversGainers');
+  const l = document.getElementById('moversLosers');
+  try {
+    const res = await fetch(`${API_BASE}/api/chain?movers=1`, { cache: 'no-store' });
+    const d = await res.json();
+    if (d.type !== 'movers') {
+      const msg = `<div class="text-[11px]" style="color:var(--text3)">${d.message || 'No movers data'}</div>`;
+      g.innerHTML = l.innerHTML = msg;
+      return;
+    }
+    document.getElementById('moversUniverse').textContent = `· scanned ${d.universe} F&O stocks`;
+    document.getElementById('moversUpdated').textContent = 'updated ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    g.innerHTML = renderMoverRows(d.gainers, true);
+    l.innerHTML = renderMoverRows(d.losers, false);
+  } catch (e) {
+    g.innerHTML = l.innerHTML = `<div class="text-[11px]" style="color:var(--red)">Failed to load movers</div>`;
+  }
+}
+function renderMoverRows(rows, up) {
+  if (!rows || !rows.length) return `<div class="text-[11px]" style="color:var(--text3)">—</div>`;
+  const col = up ? 'var(--green)' : 'var(--red)';
+  return rows.map((r, i) => {
+    const onScreen = watchlist.has(r.symbol);
+    return `<div class="mover-row" onclick="addWatchlistItem('${r.symbol}')" title="Add ${r.symbol} to screen">
+      <span style="display:flex;align-items:center;gap:8px">
+        <span style="color:var(--text3);font-size:10px;width:14px;text-align:right;font-family:var(--font-mono)">${i + 1}</span>
+        <span style="font-family:var(--font-display);font-weight:700;font-size:12px;color:var(--text1)">${r.symbol}</span>
+        ${onScreen ? '<span style="color:var(--cyan);font-size:10px" title="Already on screen">&#10003;</span>' : ''}
+      </span>
+      <span style="display:flex;align-items:center;gap:12px;font-family:var(--font-mono);font-size:11px">
+        <span style="color:var(--text2)">${fmt(r.last)}</span>
+        <span style="color:${col};font-weight:700;min-width:56px;text-align:right">${r.pct >= 0 ? '+' : ''}${r.pct.toFixed(2)}%</span>
+      </span>
+    </div>`;
+  }).join('');
+}
 
 // ========================= STATE =========================
 const IS_REMOTE = !['localhost','127.0.0.1',''].includes(location.hostname);

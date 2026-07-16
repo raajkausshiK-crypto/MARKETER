@@ -100,9 +100,14 @@ class Handler(SimpleHTTPRequestHandler):
             symbol = (params.get("symbol", ["NIFTY"])[0] or "NIFTY").upper().strip()
             expiry = params.get("expiry", [None])[0] or None
             want_candles = bool(params.get("candles"))
+            want_movers = bool(params.get("movers"))
             try:
-                payload = (backend.get_candles_cached(symbol) if want_candles
-                           else backend.get_chain_cached(symbol, expiry))
+                if want_movers:
+                    payload = backend.get_movers()
+                elif want_candles:
+                    payload = backend.get_candles_cached(symbol)
+                else:
+                    payload = backend.get_chain_cached(symbol, expiry)
             except backend.UpstoxError as e:
                 payload = {"type": "error", "message": e.message, "status": e.status}
             except Exception as e:  # pragma: no cover
