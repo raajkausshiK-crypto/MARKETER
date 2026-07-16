@@ -720,6 +720,82 @@ def get_candles_cached(symbol):
     return payload
 
 
+# ------------------------------------------------------------------ movers
+# Top gainers / losers across the F&O equity universe. Uses the hardcoded
+# instrument-key map (equities only — indices excluded) so no slow per-symbol
+# resolution is needed, and batches the market-quote call.
+_MOVERS_UNIVERSE = [(s, k) for s, k in SYMBOL_TO_INSTRUMENT.items() if k.startswith("NSE_EQ|")]
+_MOVERS_CACHE = {"t": 0.0, "data": None}
+_MOVERS_TTL = 45.0
+
+
+def _quote_pct(v):
+    """(pct_change, last_price) for one quote dict, or None. Prefers the
+    exchange-supplied net_change so it stays correct after the close."""
+    try:
+        last = float(v.get("last_price") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not last:
+        return None
+    nc = v.get("net_change")
+    if nc is not None:
+        try:
+            nc = float(nc)
+            base = last - nc
+            if base:
+                return (nc / base * 100.0, last)
+        except (TypeError, ValueError):
+            pass
+    ohlc = v.get("ohlc") or {}
+    try:
+        close = float(ohlc.get("close") or 0)
+        if close:
+            return ((last - close) / close * 100.0, last)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def get_movers(top=10):
+    now = time.time()
+    if _MOVERS_CACHE["data"] and (now - _MOVERS_CACHE["t"]) < _MOVERS_TTL:
+        return _MOVERS_CACHE["data"]
+
+    sym_by_key = {k: s for s, k in _MOVERS_UNIVERSE}
+    keys = [k for _, k in _MOVERS_UNIVERSE]
+    rows = []
+    BATCH = 100
+    for i in range(0, len(keys), BATCH):
+        chunk = keys[i:i + BATCH]
+        try:
+            data = _get("/v2/market-quote/quotes", {"instrument_key": ",".join(chunk)}).get("data", {}) or {}
+        except Exception:
+            continue
+        for v in data.values():
+            if not isinstance(v, dict):
+                continue
+            sym = sym_by_key.get(v.get("instrument_token"))
+            if not sym:
+                continue
+            pc = _quote_pct(v)
+            if pc is None:
+                continue
+            rows.append({"symbol": sym, "last": round(pc[1], 2), "pct": round(pc[0], 2)})
+
+    rows.sort(key=lambda r: r["pct"], reverse=True)
+    payload = {
+        "type": "movers",
+        "gainers": rows[:top],
+        "losers": list(reversed(rows[-top:])) if len(rows) >= top else list(reversed(rows)),
+        "universe": len(rows),
+    }
+    if rows:
+        _MOVERS_CACHE["t"] = now
+        _MOVERS_CACHE["data"] = payload
+    return payload
+
+
 # ------------------------------------------------------------------ handler
 class handler(BaseHTTPRequestHandler):
     """Classic Vercel Python serverless function entrypoint."""
@@ -730,9 +806,15 @@ class handler(BaseHTTPRequestHandler):
         symbol = (params.get("symbol", ["NIFTY"])[0] or "NIFTY").upper().strip()
         expiry = params.get("expiry", [None])[0] or None
         want_candles = bool(params.get("candles"))
+        want_movers = bool(params.get("movers"))
 
         try:
-            payload = get_candles_cached(symbol) if want_candles else get_chain_cached(symbol, expiry)
+            if want_movers:
+                payload = get_movers()
+            elif want_candles:
+                payload = get_candles_cached(symbol)
+            else:
+                payload = get_chain_cached(symbol, expiry)
         except UpstoxError as e:
             payload = {"type": "error", "message": e.message, "status": e.status}
         except Exception as e:  # pragma: no cover
