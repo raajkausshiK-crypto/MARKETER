@@ -2251,7 +2251,8 @@ function renderCategories() {
   const wlActions = activeCat === WL_CAT
     ? `<button onclick="showWatchlistOnly()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Show only your watchlist on screen (removes anything else)">Show watchlist</button>` +
       `<button onclick="clearWatchlist()" class="stock-chip" style="color:var(--red)" title="Empty your watchlist">Clear list</button>`
-    : `<button onclick="addAllInCategory()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Add all ${activeCat} stocks to the screen">&#43; Add all ${activeCat}</button>`;
+    : `<button onclick="addAllInCategory()" class="stock-chip" style="background:var(--cyan);color:var(--on-accent);border-color:var(--cyan);font-weight:700" title="Add all ${syms.length} ${activeCat} stocks to the screen">&#43; Add all ${activeCat} (${syms.length})</button>` +
+      `<button onclick="saveAllInCategory()" class="stock-chip" style="color:var(--cyan);border-color:var(--cyan)" title="Save all ${activeCat} stocks to your watchlist">&#9733; Save all</button>`;
   stocksEl.innerHTML = wlActions + syms.map(sym => {
     const inWL = watchlist.has(sym);
     const saved = isSaved(sym);
@@ -2291,6 +2292,19 @@ function addAllInCategory() {
   else if (viewMode === 'screener') renderScreener();
   renderCategories();
   toast(added ? `Added ${added} ${activeCat} stock${added > 1 ? 's' : ''}` : `All ${activeCat} stocks already on screen`, 'success');
+}
+
+// Save every stock in the active category to the watchlist (star them all).
+function saveAllInCategory() {
+  const syms = CATEGORIES[activeCat] || [];
+  if (!syms.length) return;
+  let saved = 0;
+  syms.forEach(sym => {
+    if (!isSaved(sym)) { savedWatchlist.push(sym); saved++; }
+  });
+  persistSavedWatchlist();
+  renderCategories();
+  toast(saved ? `Saved ${saved} ${activeCat} stock${saved > 1 ? 's' : ''} to watchlist` : `All ${activeCat} stocks already in watchlist`, 'success');
 }
 
 function highlightChip(sym) { renderCategories(); }
