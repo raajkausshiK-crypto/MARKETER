@@ -62,6 +62,47 @@
       --glow2: rgba(109,84,181,.04);
       --shadow-lg: 0 8px 24px rgba(70,58,20,.14);
     }
+    /* --- extra dark palettes (accent/bg/text only; the rest inherits) --- */
+    :root[data-theme="midnight"] {
+      --bg: #0a0d14; --bg2: #111722; --bg3: #18202e;
+      --border: #222c3d; --border2: #2e3a4f; --border3: #3c4a63;
+      --text1: #eef2f8; --text2: #9aa6ba; --text3: #5f6b80;
+      --accent-rgb: 56,132,255; --accent-hover: #5b9bff; --violet: #8fa8ff;
+      --on-accent: #05101f;
+      --glow1: rgba(56,132,255,.06); --glow2: rgba(56,132,255,.03);
+      color-scheme: dark;
+    }
+    :root[data-theme="emerald"] {
+      --bg: #08110d; --bg2: #0f1a15; --bg3: #16241d;
+      --border: #20302a; --border2: #2b4038; --border3: #395249;
+      --text1: #eef5f1; --text2: #9ab0a6; --text3: #5f766c;
+      --accent-rgb: 16,185,129; --accent-hover: #34d399; --green: #35d9a0;
+      --on-accent: #04140d;
+      --glow1: rgba(16,185,129,.06); --glow2: rgba(16,185,129,.03);
+      color-scheme: dark;
+    }
+    :root[data-theme="violet"] {
+      --bg: #0c0a14; --bg2: #14111f; --bg3: #1d182b;
+      --border: #2a2340; --border2: #362d52; --border3: #473b6b;
+      --text1: #f1eef8; --text2: #a49bb8; --text3: #6a5f80;
+      --accent-rgb: 139,110,246; --accent-hover: #a78bfa; --violet: #c4b5fd;
+      --on-accent: #0e0820;
+      --glow1: rgba(139,110,246,.07); --glow2: rgba(139,110,246,.035);
+      color-scheme: dark;
+    }
+    /* --- extra light palette --- */
+    :root[data-theme="frost"] {
+      --bg: #e6eaf0; --bg2: #f3f6fa; --bg3: #eaeef4;
+      --border: #d3d9e2; --border2: #c2cad6; --border3: #aab4c4;
+      --text1: #14181f; --text2: #4e5563; --text3: #7c8494;
+      --accent-rgb: 37,99,235; --accent-hover: #1d4ed8;
+      --green: #16955c; --red: #cf4438; --amber: #b7822a; --violet: #6d54b5;
+      --on-accent: #ffffff;
+      --hover-tint: rgba(0,0,0,.04); --dot: rgba(0,0,0,.03);
+      --glow1: rgba(37,99,235,.06); --glow2: rgba(37,99,235,.04);
+      --shadow-lg: 0 8px 24px rgba(30,50,90,.14);
+      color-scheme: light;
+    }
     :root { color-scheme: dark; }
     :root[data-theme="light"] { color-scheme: light; }
     html { transition: none; }
@@ -378,10 +419,13 @@
         <span id="statusDot" class="w-2 h-2 rounded-full" style="background:var(--text3)"></span>
         <span id="statusText" style="color:var(--text3)">Offline</span>
       </div>
-      <button id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark theme"
-        class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text2)">
-        <span id="themeIcon">&#9790;</span>
-      </button>
+      <div style="position:relative">
+        <button id="themeToggle" onclick="toggleThemeMenu(event)" title="Choose theme"
+          class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text2)">
+          <span id="themeIcon">&#9790;</span>
+        </button>
+        <div id="themeMenu" class="hidden" style="position:absolute;left:0;top:112%;z-index:200;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:8px;box-shadow:var(--shadow-lg);width:210px;max-width:min(210px,86vw)"></div>
+      </div>
       <div class="tool-btn bright-ctl" title="Brightness" style="color:var(--text3)">
         <span style="font-size:13px">&#9728;</span>
         <input id="brightnessSlider" type="range" min="55" max="100" value="100" oninput="setBrightness(this.value)">
@@ -601,18 +645,52 @@
 
 <script>
 // ========================= THEME =========================
+const THEMES = [
+  { key: 'dark',     name: 'Obsidian Gold',     dark: true,  swatch: '#0a0a0d', accent: '#d4af37' },
+  { key: 'midnight', name: 'Midnight Sapphire',  dark: true,  swatch: '#0a0d14', accent: '#3884ff' },
+  { key: 'emerald',  name: 'Emerald Noir',       dark: true,  swatch: '#08110d', accent: '#10b981' },
+  { key: 'violet',   name: 'Royal Violet',       dark: true,  swatch: '#0c0a14', accent: '#8b6ef6' },
+  { key: 'light',    name: 'Porcelain Gold',     dark: false, swatch: '#e5e0d3', accent: '#a67c18' },
+  { key: 'frost',    name: 'Frost',              dark: false, swatch: '#e6eaf0', accent: '#2563eb' },
+];
+function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'dark'; }
 function applyThemeIcon() {
-  const t = document.documentElement.getAttribute('data-theme') || 'dark';
+  const t = THEMES.find(x => x.key === currentTheme());
   const icon = document.getElementById('themeIcon');
-  if (icon) icon.innerHTML = t === 'light' ? '&#9728;' : '&#9790;';  // ☀ in light, ☾ in dark
+  if (icon) icon.innerHTML = (t && !t.dark) ? '&#9728;' : '&#9790;';  // ☀ light, ☾ dark
 }
-function toggleTheme() {
-  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next = cur === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('theme', next);
+function setTheme(key) {
+  document.documentElement.setAttribute('data-theme', key);
+  localStorage.setItem('theme', key);
   applyThemeIcon();
+  renderThemeMenu();
 }
+function renderThemeMenu() {
+  const menu = document.getElementById('themeMenu');
+  if (!menu) return;
+  const cur = currentTheme();
+  menu.innerHTML =
+    `<div class="label" style="padding:2px 6px 6px">Theme</div>` +
+    THEMES.map(t => `
+      <button onclick="setTheme('${t.key}')" style="width:100%;display:flex;align-items:center;gap:9px;padding:7px 8px;border:0;border-radius:8px;background:${t.key === cur ? 'var(--cyan-dim)' : 'transparent'};cursor:pointer;text-align:left">
+        <span style="width:18px;height:18px;border-radius:5px;flex:none;background:${t.swatch};border:1px solid var(--border3);box-shadow:inset 0 0 0 2px ${t.accent}"></span>
+        <span style="flex:1;font-family:var(--font-display);font-size:12px;font-weight:600;color:var(--text1)">${t.name}</span>
+        ${t.key === cur ? '<span style="color:var(--cyan);font-size:12px">&#10003;</span>' : '<span style="color:var(--text3);font-size:9px">' + (t.dark ? '&#9790;' : '&#9728;') + '</span>'}
+      </button>`).join('');
+}
+function toggleThemeMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const menu = document.getElementById('themeMenu');
+  const show = menu.classList.contains('hidden');
+  if (show) { renderThemeMenu(); menu.classList.remove('hidden'); }
+  else menu.classList.add('hidden');
+}
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('themeMenu');
+  if (menu && !menu.classList.contains('hidden') && !e.target.closest('#themeMenu') && !e.target.closest('#themeToggle')) {
+    menu.classList.add('hidden');
+  }
+});
 applyThemeIcon();
 
 // ========================= BRIGHTNESS =========================
