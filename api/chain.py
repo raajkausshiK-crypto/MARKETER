@@ -726,7 +726,7 @@ def get_candles_cached(symbol):
 # resolution is needed, and batches the market-quote call.
 _MOVERS_UNIVERSE = [(s, k) for s, k in SYMBOL_TO_INSTRUMENT.items() if k.startswith("NSE_EQ|")]
 _MOVERS_CACHE = {"t": 0.0, "data": None}
-_MOVERS_TTL = 45.0
+_MOVERS_TTL = 4.0   # short so the movers board updates live (bulk quote is cheap)
 
 
 def _quote_pct(v):
