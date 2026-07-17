@@ -1862,7 +1862,28 @@ const FS_TIMEFRAMES = [
   { key: '5h',  label: '5H',   range: 300 },
   { key: '6h',  label: '6H',   range: 360 },
   { key: '1d',  label: '1D',   range: 0   },
+  { key: 'wk',  label: '1W',   daily: true, days: 5   },   // last ~5 trading days
+  { key: 'mo',  label: '1M',   daily: true, days: 22  },   // last ~22 trading days
 ];
+const dailyCandleCache = new Map();   // sym -> { t, candles, fetching }
+const DAILY_TTL = 600000;             // 10 min
+function ensureDailyCandles(sym) {
+  const e = dailyCandleCache.get(sym) || {};
+  const now = Date.now();
+  if (e.fetching || (e.t && now - e.t < DAILY_TTL)) return;
+  e.fetching = true;
+  dailyCandleCache.set(sym, e);
+  fetch(`${API_BASE}/api/chain?symbol=${encodeURIComponent(sym)}&candles=1&daily=1`, { cache: 'no-store' })
+    .then(r => r.json())
+    .then(data => {
+      e.fetching = false;
+      if (data.type === 'candles') { e.t = Date.now(); e.candles = data.candles || []; }
+      dailyCandleCache.set(sym, e);
+      const tf = FS_TIMEFRAMES.find(t => t.key === _fsTf);
+      if (tf && tf.daily && _fsSym === sym && document.getElementById('fsOverlay').classList.contains('open')) renderFsChart();
+    })
+    .catch(() => { e.fetching = false; dailyCandleCache.set(sym, e); });
+}
 
 function openFsGraph(sym) {
   if (!sym) sym = selectedSymbol;
@@ -1876,6 +1897,8 @@ function openFsGraph(sym) {
   renderFsTfBar();
 
   ensureCandles(sym);
+  const _tf = FS_TIMEFRAMES.find(t => t.key === _fsTf);
+  if (_tf && _tf.daily) ensureDailyCandles(sym);
   const e = candleCache.get(sym);
   const raw = e && e.candles;
   if (raw && raw.length) {
@@ -1896,17 +1919,31 @@ function renderFsTfBar() {
 
 function setFsTf(key) {
   _fsTf = key;
+  const tf = FS_TIMEFRAMES.find(t => t.key === key);
+  if (tf && tf.daily) ensureDailyCandles(_fsSym);
   renderFsTfBar();
   renderFsChart();
 }
 
 function renderFsChart() {
-  const e = candleCache.get(_fsSym);
-  if (!e || !e.candles || !e.candles.length) return;
-  const raw = e.candles;
   const tf = FS_TIMEFRAMES.find(t => t.key === _fsTf) || FS_TIMEFRAMES[9];
-  const candles = tf.range > 0 ? raw.slice(-tf.range) : raw;
-  const useDaily = e.interval === 'day';
+  let candles, useDaily;
+  if (tf.daily) {
+    const de = dailyCandleCache.get(_fsSym);
+    if (!de || !de.candles || !de.candles.length) {
+      ensureDailyCandles(_fsSym);
+      document.getElementById('fsBody').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-family:var(--font-display);font-size:16px">Loading ' + tf.label + ' chart…</div>';
+      return;
+    }
+    candles = de.candles.slice(-tf.days);
+    useDaily = true;
+  } else {
+    const e = candleCache.get(_fsSym);
+    if (!e || !e.candles || !e.candles.length) return;
+    const raw = e.candles;
+    candles = tf.range > 0 ? raw.slice(-tf.range) : raw;
+    useDaily = e.interval === 'day';
+  }
   const n = candles.length;
   if (!n) return;
 
