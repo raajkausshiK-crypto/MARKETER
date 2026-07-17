@@ -1953,7 +1953,29 @@ function renderFsChart() {
       document.getElementById('fsBody').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-family:var(--font-display);font-size:16px">Loading ' + tf.label + ' chart…</div>';
       return;
     }
-    candles = de.candles.slice(-tf.days);
+    let daily = de.candles.slice();
+    // Daily history only returns completed sessions, so today's bar is missing —
+    // synthesize it from the intraday candles so the weekly/monthly views line
+    // up with the live (1D) view instead of ending yesterday.
+    const ie = candleCache.get(_fsSym);
+    const intraday = (ie && ie.candles) || [];
+    if (intraday.length) {
+      const todayKey = String(intraday[intraday.length - 1][0]).slice(0, 10);
+      const lastDailyKey = daily.length ? String(daily[daily.length - 1][0]).slice(0, 10) : '';
+      if (lastDailyKey !== todayKey) {
+        const td = intraday.filter(c => String(c[0]).slice(0, 10) === todayKey);
+        if (td.length) {
+          daily.push([
+            td[0][0], td[0][1],
+            Math.max(...td.map(c => c[2])),
+            Math.min(...td.map(c => c[3])),
+            td[td.length - 1][4],
+            td.reduce((s, c) => s + (c[5] || 0), 0),
+          ]);
+        }
+      }
+    }
+    candles = daily.slice(-tf.days);
     useDaily = true;
   } else {
     const e = candleCache.get(_fsSym);
