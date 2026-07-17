@@ -1880,27 +1880,31 @@ const FS_TIMEFRAMES = [
   { key: '5h',  label: '5H',   range: 300 },
   { key: '6h',  label: '6H',   range: 360 },
   { key: '1d',  label: '1D',   range: 0   },
-  { key: 'wk',  label: '1W',   daily: true, days: 5   },   // last ~5 trading days
-  { key: 'mo',  label: '1M',   daily: true, days: 22  },   // last ~22 trading days
+  // 1W / 1M use 30-minute bars (same slice-by-range algo as the intraday
+  // frames) so they render dense candles with the same gap/look — not a
+  // handful of fat daily blocks. ~13 half-hour bars per trading day.
+  { key: 'wk',  label: '1W',   interval: '30minute', bars: 66  },   // ~5 trading days
+  { key: 'mo',  label: '1M',   interval: '30minute', bars: 286 },   // ~22 trading days
 ];
-const dailyCandleCache = new Map();   // sym -> { t, candles, fetching }
-const DAILY_TTL = 600000;             // 10 min
-function ensureDailyCandles(sym) {
-  const e = dailyCandleCache.get(sym) || {};
+const intervalCandleCache = new Map();   // "sym|interval" -> { t, candles, fetching }
+const INTERVAL_TTL = 600000;             // 10 min
+function ensureIntervalCandles(sym, interval) {
+  const k = sym + '|' + interval;
+  const e = intervalCandleCache.get(k) || {};
   const now = Date.now();
-  if (e.fetching || (e.t && now - e.t < DAILY_TTL)) return;
+  if (e.fetching || (e.t && now - e.t < INTERVAL_TTL)) return;
   e.fetching = true;
-  dailyCandleCache.set(sym, e);
-  fetch(`${API_BASE}/api/chain?symbol=${encodeURIComponent(sym)}&candles=1&daily=1`, { cache: 'no-store' })
+  intervalCandleCache.set(k, e);
+  fetch(`${API_BASE}/api/chain?symbol=${encodeURIComponent(sym)}&candles=1&interval=${interval}`, { cache: 'no-store' })
     .then(r => r.json())
     .then(data => {
       e.fetching = false;
       if (data.type === 'candles') { e.t = Date.now(); e.candles = data.candles || []; }
-      dailyCandleCache.set(sym, e);
+      intervalCandleCache.set(k, e);
       const tf = FS_TIMEFRAMES.find(t => t.key === _fsTf);
-      if (tf && tf.daily && _fsSym === sym && document.getElementById('fsOverlay').classList.contains('open')) renderFsChart();
+      if (tf && tf.interval === interval && _fsSym === sym && document.getElementById('fsOverlay').classList.contains('open')) renderFsChart();
     })
-    .catch(() => { e.fetching = false; dailyCandleCache.set(sym, e); });
+    .catch(() => { e.fetching = false; intervalCandleCache.set(k, e); });
 }
 
 function openFsGraph(sym) {
@@ -1916,7 +1920,7 @@ function openFsGraph(sym) {
 
   ensureCandles(sym);
   const _tf = FS_TIMEFRAMES.find(t => t.key === _fsTf);
-  if (_tf && _tf.daily) ensureDailyCandles(sym);
+  if (_tf && _tf.interval) ensureIntervalCandles(sym, _tf.interval);
   const e = candleCache.get(sym);
   const raw = e && e.candles;
   if (raw && raw.length) {
@@ -1938,7 +1942,7 @@ function renderFsTfBar() {
 function setFsTf(key) {
   _fsTf = key;
   const tf = FS_TIMEFRAMES.find(t => t.key === key);
-  if (tf && tf.daily) ensureDailyCandles(_fsSym);
+  if (tf && tf.interval) ensureIntervalCandles(_fsSym, tf.interval);
   renderFsTfBar();
   renderFsChart();
 }
@@ -1946,37 +1950,15 @@ function setFsTf(key) {
 function renderFsChart() {
   const tf = FS_TIMEFRAMES.find(t => t.key === _fsTf) || FS_TIMEFRAMES[9];
   let candles, useDaily;
-  if (tf.daily) {
-    const de = dailyCandleCache.get(_fsSym);
+  if (tf.interval) {
+    const de = intervalCandleCache.get(_fsSym + '|' + tf.interval);
     if (!de || !de.candles || !de.candles.length) {
-      ensureDailyCandles(_fsSym);
+      ensureIntervalCandles(_fsSym, tf.interval);
       document.getElementById('fsBody').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-family:var(--font-display);font-size:16px">Loading ' + tf.label + ' chart…</div>';
       return;
     }
-    let daily = de.candles.slice();
-    // Daily history only returns completed sessions, so today's bar is missing —
-    // synthesize it from the intraday candles so the weekly/monthly views line
-    // up with the live (1D) view instead of ending yesterday.
-    const ie = candleCache.get(_fsSym);
-    const intraday = (ie && ie.candles) || [];
-    if (intraday.length) {
-      const todayKey = String(intraday[intraday.length - 1][0]).slice(0, 10);
-      const lastDailyKey = daily.length ? String(daily[daily.length - 1][0]).slice(0, 10) : '';
-      if (lastDailyKey !== todayKey) {
-        const td = intraday.filter(c => String(c[0]).slice(0, 10) === todayKey);
-        if (td.length) {
-          daily.push([
-            td[0][0], td[0][1],
-            Math.max(...td.map(c => c[2])),
-            Math.min(...td.map(c => c[3])),
-            td[td.length - 1][4],
-            td.reduce((s, c) => s + (c[5] || 0), 0),
-          ]);
-        }
-      }
-    }
-    candles = daily.slice(-tf.days);
-    useDaily = true;
+    candles = de.candles.slice(-tf.bars);
+    useDaily = true;   // multi-day span → date-based x-axis labels
   } else {
     const e = candleCache.get(_fsSym);
     if (!e || !e.candles || !e.candles.length) return;
