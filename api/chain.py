@@ -676,53 +676,64 @@ def get_chain_cached(symbol, expiry):
 
 
 # ------------------------------------------------------------------ candles
-def get_candles(symbol, daily=False):
-    """Price candles for the stock graph.
+# How far back to pull each historical interval (days).
+_INTERVAL_SPAN = {"30minute": 90, "day": 220, "week": 900, "month": 2000}
 
-    daily=False → intraday 1-minute (for 1m…1D views); falls back to daily
-                  when the market is closed / intraday is empty.
-    daily=True  → daily candles over the last ~200 days (for the 1W / 1M views).
 
-    Returns {"type": "candles", "symbol", "interval", "candles": [[ts,o,h,l,c,v], ...]}
-    in chronological order.
+def get_candles(symbol, interval=None):
+    """Price candles for the stock graph, chronological order.
+
+    interval None       → intraday 1-minute (1m…1D views), daily fallback when
+                          the market is closed / intraday is empty.
+    interval "30minute" → 30-minute bars over ~90 days (dense 1W / 1M views).
+    interval "day"      → daily bars over ~220 days.
+
+    Returns {"type": "candles", "symbol", "interval", "candles": [[ts,o,h,l,c,v], ...]}.
     """
     instrument_key = resolve_instrument(symbol)
     enc = urllib.parse.quote(instrument_key, safe="")
 
-    interval = "1minute"
-    candles = []
-    if not daily:
+    if interval in _INTERVAL_SPAN:
+        used = interval
+        to = datetime.date.today()
+        frm = to - datetime.timedelta(days=_INTERVAL_SPAN[interval])
+        try:
+            data = _get(f"/v2/historical-candle/{enc}/{interval}/{to}/{frm}", {}).get("data", {}) or {}
+            candles = data.get("candles") or []
+        except UpstoxError:
+            candles = []
+    else:
+        used = "1minute"
         try:
             data = _get(f"/v2/historical-candle/intraday/{enc}/1minute", {}).get("data", {}) or {}
             candles = data.get("candles") or []
         except UpstoxError:
             candles = []
-
-    if daily or not candles:
-        interval = "day"
-        to = datetime.date.today()
-        frm = to - datetime.timedelta(days=200 if daily else 45)
-        data = _get(f"/v2/historical-candle/{enc}/day/{to}/{frm}", {}).get("data", {}) or {}
-        candles = data.get("candles") or []
+        if not candles:               # market closed / empty → daily fallback
+            used = "day"
+            to = datetime.date.today()
+            frm = to - datetime.timedelta(days=45)
+            data = _get(f"/v2/historical-candle/{enc}/day/{to}/{frm}", {}).get("data", {}) or {}
+            candles = data.get("candles") or []
 
     # Upstox returns newest-first: [ts, open, high, low, close, volume, oi]
     candles = [[c[0], c[1], c[2], c[3], c[4], c[5] if len(c) > 5 else 0] for c in reversed(candles)]
     # Previous-session close (the 1D baseline) from daily history, not the
     # market quote's close_price (which flips to today's close after the bell).
     prev_close = round(get_prev_close(instrument_key) or 0, 2)
-    return {"type": "candles", "symbol": symbol, "interval": interval,
+    return {"type": "candles", "symbol": symbol, "interval": used,
             "prev_close": prev_close, "candles": candles}
 
 
-def get_candles_cached(symbol, daily=False):
+def get_candles_cached(symbol, interval=None):
     now = time.time()
-    key = (symbol, daily)
+    key = (symbol, interval)
     hit = _CANDLE_CACHE.get(key)
-    ttl = 600 if daily else _CANDLE_TTL   # daily bars barely change intraday
+    ttl = 600 if interval else _CANDLE_TTL   # longer bars barely change intraday
     if hit and (now - hit[0]) < ttl:
         return hit[1]
-    payload = get_candles(symbol, daily=daily)
-    if payload.get("candles"):             # don't cache empty results
+    payload = get_candles(symbol, interval=interval)
+    if payload.get("candles"):               # don't cache empty results
         _CANDLE_CACHE[key] = (now, payload)
     return payload
 
@@ -814,13 +825,15 @@ class handler(BaseHTTPRequestHandler):
         expiry = params.get("expiry", [None])[0] or None
         want_candles = bool(params.get("candles"))
         want_movers = bool(params.get("movers"))
-        want_daily = bool(params.get("daily"))
+        interval = params.get("interval", [None])[0]
+        if not interval and params.get("daily"):
+            interval = "day"   # backwards-compat with ?daily=1
 
         try:
             if want_movers:
                 payload = get_movers()
             elif want_candles:
-                payload = get_candles_cached(symbol, daily=want_daily)
+                payload = get_candles_cached(symbol, interval=interval)
             else:
                 payload = get_chain_cached(symbol, expiry)
         except UpstoxError as e:
