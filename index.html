@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Market Options Screener</title>
   <script>
+    // Opened as a raw file? The styling library (Tailwind CDN) and the local
+    // API don't work over file://, so the layout collapses. Bounce to the local
+    // server where everything renders correctly.
+    if (location.protocol === 'file:') {
+      location.replace('http://localhost:8080/' + location.search);
+    }
     // Apply the saved theme before first paint to avoid a flash.
     (function () {
       var t = localStorage.getItem('theme') || 'dark';
@@ -269,6 +275,10 @@
 
     /* Selection */
     ::selection { background: rgba(var(--accent-rgb),.2); }
+
+    /* Safety net: guarantee hidden panels stay hidden even if the Tailwind CDN
+       hasn't applied yet (so the UI never piles every panel on top of each other). */
+    .hidden { display: none !important; }
 
     /* Screen dimmer (brightness control) — safe overlay, no filter side-effects */
     #dimmer { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none;
