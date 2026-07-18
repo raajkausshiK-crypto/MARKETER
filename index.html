@@ -556,9 +556,9 @@
           </div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-          <button id="gapToggleBtn" onclick="toggleGap()" title="Filter strikes to a price-based gap"
-            class="tool-btn text-sm px-3.5 py-2 text-indigo-400">
-            Gap: auto
+          <button id="gapToggleBtn" onclick="toggleGap()" title="Cycle strike gap: All / 25 / 50 / 100 / 200"
+            class="tool-btn text-sm px-3.5 py-2 text-slate-400">
+            All strikes
           </button>
           <button id="graphToggleBtn" onclick="toggleGraph()" title="Toggle OI graph view"
             class="tool-btn text-sm px-3.5 py-2 text-slate-300">
@@ -815,7 +815,10 @@ let detailCurSym = null;                      // last symbol the detail table ce
 
 // Strike-gap filter: show strikes spaced by a gap that scales with the stock
 // price (captures meaningful moves instead of every tiny listed strike).
-let gapMode = false;   // default: show the full strike ladder (gap filter is opt-in)
+// Strike-gap filter: 0 = show every strike; otherwise keep only strikes on the
+// chosen price gap (25 / 50 / 100 / 200). Cycled via the Gap button.
+let gapValue = 0;
+const GAP_CHOICES = [0, 25, 50, 100, 200];
 // Graph view: 'table' shows the chain table, 'graph' the price chart.
 let chartMode = 'table';
 // Per-pane table/graph mode, keyed "s:<sym>" (screener) or "q:<slot>" (quad).
@@ -831,7 +834,7 @@ function saveState() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       symbols: [...watchlist.keys()],
-      selectedSymbol, viewMode, quadSlots, gapMode, chartMode, paneCharts, priceAlerts,
+      selectedSymbol, viewMode, quadSlots, gapValue, chartMode, paneCharts, priceAlerts,
     }));
   } catch (_) { /* storage unavailable — run without persistence */ }
 }
@@ -847,7 +850,7 @@ function loadState() {
       }
     });
     selectedSymbol = (s.selectedSymbol && watchlist.has(s.selectedSymbol)) ? s.selectedSymbol : null;
-    gapMode = s.gapMode === true;   // default OFF → show the full strike ladder
+    gapValue = GAP_CHOICES.includes(s.gapValue) ? s.gapValue : 0;   // default: all strikes
     chartMode = s.chartMode === 'graph' ? 'graph' : 'table';
     if (s.paneCharts && typeof s.paneCharts === 'object') paneCharts = s.paneCharts;
     if (s.priceAlerts && typeof s.priceAlerts === 'object') priceAlerts = s.priceAlerts;
@@ -874,17 +877,14 @@ function strikeGapFor(spot) {
 // merged after this, so they always survive. Falls back to the full list if
 // filtering would leave too few rows (e.g. odd strike schemes).
 function applyGap(rows, spot) {
-  if (!gapMode || !spot) return rows;
-  const gap = strikeGapFor(spot);
-  if (!gap) return rows;
+  if (!gapValue || !spot) return rows;
+  const gap = gapValue;
   const on = rows.filter(r => {
     const m = Math.abs(r.strike) % gap;
     return m < 0.001 || gap - m < 0.001;
   });
-  // Never over-thin: if the coarse gap leaves too few strikes (the price-based
-  // gap can be far coarser than the exchange's actual strike step), fall back
-  // to the full ladder.
-  return on.length >= 12 ? on : rows;
+  // Respect the user's chosen gap, but never collapse to almost nothing.
+  return on.length >= 4 ? on : rows;
 }
 
 const fmt = v => Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -1809,12 +1809,11 @@ function renderDetail() {
     info.className = 'hidden';
   }
 
-  // Keep the Gap button label in sync with the current price bracket.
+  // Keep the Gap button label in sync with the chosen strike gap.
   const gapBtn = document.getElementById('gapToggleBtn');
-  const gap = strikeGapFor(spot);
-  gapBtn.textContent = gapMode ? (gap ? `Gap: ${gap}` : 'Gap: auto') : 'All strikes';
+  gapBtn.textContent = gapValue ? `Gap: ${gapValue}` : 'All strikes';
   gapBtn.className = 'tool-btn text-sm px-3.5 py-2 ' +
-    (gapMode ? 'active text-indigo-400' : 'text-slate-400');
+    (gapValue ? 'active text-indigo-400' : 'text-slate-400');
 
   // Alert button state
   updateAlertBtn();
@@ -1855,8 +1854,9 @@ function renderDetail() {
 }
 
 // ========================= GAP / GRAPH TOGGLES =========================
-function toggleGap() {
-  gapMode = !gapMode;
+function toggleGap() {   // cycles: All → 25 → 50 → 100 → 200 → All
+  const i = GAP_CHOICES.indexOf(gapValue);
+  gapValue = GAP_CHOICES[(i + 1) % GAP_CHOICES.length];
   detailCurSym = null;              // re-center ATM after the row set changes
   renderDetail();
   if (viewMode === 'quad') renderQuad();
