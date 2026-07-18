@@ -444,34 +444,43 @@ _PREVCLOSE_CACHE = {}
 _PREVCLOSE_TTL = 300.0  # prev close is fixed for the whole trading day
 
 
-def get_prev_close(instrument_key):
-    """The close of the LAST COMPLETED trading session (i.e. the "1D" baseline
-    brokers use).
+def get_prev_close(instrument_key, spot=None):
+    """The close of the session BEFORE the current one — the "1D" baseline
+    brokers use.
 
-    The market-quote `close_price` is unreliable: after the close it flips to
-    TODAY's close, which would make the day's change collapse to zero. So we
-    read daily historical candles and take the most recent session that is not
-    today.
+    Reads daily history (newest-first). The tricky part is knowing whether the
+    newest daily bar is the *current* session or a completed past one — the
+    system clock can't be trusted (it may run ahead of the last trading day on
+    weekends/holidays). So we compare the current price (`spot`) to the newest
+    daily close: if they match, that newest bar IS the current session and the
+    previous close is the bar before it; otherwise the newest bar already IS the
+    previous session's close.
     """
     now = time.time()
-    hit = _PREVCLOSE_CACHE.get(instrument_key)
+    ck = (instrument_key, round(spot, 2) if spot else None)
+    hit = _PREVCLOSE_CACHE.get(ck)
     if hit and (now - hit[0]) < _PREVCLOSE_TTL:
         return hit[1]
     prev = 0.0
     try:
         enc = urllib.parse.quote(instrument_key, safe="")
         to = datetime.date.today()
-        frm = to - datetime.timedelta(days=15)
+        frm = to - datetime.timedelta(days=20)
         data = _get(f"/v2/historical-candle/{enc}/day/{to}/{frm}", {}).get("data", {}) or {}
         candles = data.get("candles") or []  # newest-first: [ts,o,h,l,c,v,oi]
-        today = str(datetime.date.today())
-        for c in candles:
-            if str(c[0])[:10] != today:   # skip today's (in-progress/just-closed) bar
-                prev = float(c[4])
-                break
+        closes = [float(c[4]) for c in candles]
+        if closes:
+            newest = closes[0]
+            tol = max(0.05, (spot or newest) * 0.001)
+            if spot and abs(spot - newest) <= tol:
+                # newest bar is the current session → previous = the one before
+                prev = closes[1] if len(closes) > 1 else newest
+            else:
+                # newest bar is already a completed prior session
+                prev = newest
     except Exception:
         prev = 0.0
-    _PREVCLOSE_CACHE[instrument_key] = (now, prev)
+    _PREVCLOSE_CACHE[ck] = (now, prev)
     return prev
 
 
@@ -570,7 +579,7 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
     rows = live or rows
 
     quote = get_quote(instrument_key)
-    prev_close = get_prev_close(instrument_key) or quote["close_price"] or spot
+    prev_close = get_prev_close(instrument_key, spot) or quote["close_price"] or spot
 
     analytics = _compute_analytics(rows, spot)
     return {
@@ -586,7 +595,7 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
 def build_synthetic_chain(symbol, instrument_key):
     quote = get_quote(instrument_key)
     spot = quote["last_price"] or get_ltp(instrument_key)
-    prev_close = get_prev_close(instrument_key) or quote["close_price"] or spot
+    prev_close = get_prev_close(instrument_key, spot) or quote["close_price"] or spot
     if spot >= 20000:
         step = 100
     elif spot >= 5000:
@@ -709,18 +718,32 @@ def get_candles(symbol, interval=None):
             candles = data.get("candles") or []
         except UpstoxError:
             candles = []
-        if not candles:               # market closed / empty → daily fallback
-            used = "day"
+        if not candles:
+            # Today's intraday is empty (pre-open / market closed). Use the most
+            # recent completed session's 1-minute candles so the 1m…1D frames
+            # still show a real trading day — not daily bars sliced by minute.
             to = datetime.date.today()
-            frm = to - datetime.timedelta(days=45)
-            data = _get(f"/v2/historical-candle/{enc}/day/{to}/{frm}", {}).get("data", {}) or {}
-            candles = data.get("candles") or []
+            frm = to - datetime.timedelta(days=6)
+            try:
+                data = _get(f"/v2/historical-candle/{enc}/1minute/{to}/{frm}", {}).get("data", {}) or {}
+                hist = data.get("candles") or []
+            except UpstoxError:
+                hist = []
+            if hist:                       # newest-first → keep only the latest day
+                newest_day = str(hist[0][0])[:10]
+                candles = [c for c in hist if str(c[0])[:10] == newest_day]
+                used = "1minute"
+            else:                          # last resort: daily
+                used = "day"
+                data = _get(f"/v2/historical-candle/{enc}/day/{to}/{to - datetime.timedelta(days=45)}", {}).get("data", {}) or {}
+                candles = data.get("candles") or []
 
     # Upstox returns newest-first: [ts, open, high, low, close, volume, oi]
     candles = [[c[0], c[1], c[2], c[3], c[4], c[5] if len(c) > 5 else 0] for c in reversed(candles)]
     # Previous-session close (the 1D baseline) from daily history, not the
     # market quote's close_price (which flips to today's close after the bell).
-    prev_close = round(get_prev_close(instrument_key) or 0, 2)
+    latest_close = candles[-1][4] if candles else None
+    prev_close = round(get_prev_close(instrument_key, latest_close) or 0, 2)
     return {"type": "candles", "symbol": symbol, "interval": used,
             "prev_close": prev_close, "candles": candles}
 
