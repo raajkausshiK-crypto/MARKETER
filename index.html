@@ -1949,7 +1949,7 @@ function setFsTf(key) {
 
 function renderFsChart() {
   const tf = FS_TIMEFRAMES.find(t => t.key === _fsTf) || FS_TIMEFRAMES[9];
-  let candles, useDaily;
+  let candles, useDaily, tfmt;
   if (tf.interval) {
     const de = intervalCandleCache.get(_fsSym + '|' + tf.interval);
     if (!de || !de.candles || !de.candles.length) {
@@ -1958,13 +1958,15 @@ function renderFsChart() {
       return;
     }
     candles = de.candles.slice(-tf.bars);
-    useDaily = true;   // multi-day span → date-based x-axis labels
+    useDaily = true;              // multi-day span
+    tfmt = 'datetime';            // 30-min bars → date + time
   } else {
     const e = candleCache.get(_fsSym);
     if (!e || !e.candles || !e.candles.length) return;
     const raw = e.candles;
     candles = tf.range > 0 ? raw.slice(-tf.range) : raw;
     useDaily = e.interval === 'day';
+    tfmt = useDaily ? 'date' : 'time';
   }
   const n = candles.length;
   if (!n) return;
@@ -2006,14 +2008,16 @@ function renderFsChart() {
   }
 
   const grid = [hi, lo + span * 0.75, lo + span * 0.5, lo + span * 0.25, lo];
-  const lbl = ts => useDaily
-    ? new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-    : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const D = ts => new Date(ts);
+  const dOpt = { day: '2-digit', month: 'short' };
+  const tOpt = { hour: '2-digit', minute: '2-digit', hour12: false };
+  // x-axis: keep it compact (date for multi-day spans, time for a single day).
+  const lbl = ts => useDaily ? D(ts).toLocaleDateString('en-IN', dOpt) : D(ts).toLocaleTimeString('en-IN', tOpt);
   const fmtVol = v => { if (v >= 1e7) return (v/1e7).toFixed(1)+'Cr'; if (v >= 1e5) return (v/1e5).toFixed(1)+'L'; if (v >= 1e3) return (v/1e3).toFixed(0)+'K'; return String(Math.round(v)); };
 
   const tLabels = [0, Math.floor(n * 0.25), Math.floor(n * 0.5), Math.floor(n * 0.75), n - 1];
 
-  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap: gap2, lo, hi, span, W, H, n, isDaily: useDaily, hasVol, volBase };
+  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap: gap2, lo, hi, span, W, H, n, isDaily: useDaily, tfmt, hasVol, volBase };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
   document.getElementById('fsBody').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" data-chart="${chartData}" style="cursor:crosshair" xmlns="http://www.w3.org/2000/svg">
@@ -2644,9 +2648,12 @@ function chartCrosshair(ev) {
   // OHLC tooltip for the hovered candle.
   const up = cand[4] >= cand[1];
   const col = up ? '#22c55e' : '#ef4444';
-  const dt = g.isDaily
-    ? new Date(cand[0]).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-    : new Date(cand[0]).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const _d = new Date(cand[0]);
+  const _date = _d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  const _time = _d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const dt = g.tfmt === 'datetime' ? `${_date} ${_time}`
+           : g.tfmt === 'date' || g.isDaily ? _date
+           : _time;
   const chg = cand[1] ? ((cand[4] - cand[1]) / cand[1]) * 100 : 0;
   const vfmt = v => v >= 1e7 ? (v/1e7).toFixed(1)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(1)+'L' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : String(Math.round(v));
   const rows = [
