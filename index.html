@@ -1986,7 +1986,9 @@ function renderFsChart() {
   const span = (hi - lo) || 1;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
   const gap2 = iw / n;
-  const cw = Math.max(2, gap2 * 0.88);
+  // Cap the candle width so short/sparse timeframes (e.g. 1m = 1 bar) don't
+  // render as one giant block — professional charts keep bars a fixed size.
+  const cw = Math.max(2, Math.min(22, gap2 * 0.88));
   const wickW = Math.max(1, cw * 0.15);
   const maxVol = hasVol ? Math.max(...candles.map(c => c[5] || 0)) || 1 : 1;
   const volBase = P.t + ih + GAP + VOL_H;
