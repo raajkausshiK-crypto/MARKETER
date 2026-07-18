@@ -815,7 +815,7 @@ let detailCurSym = null;                      // last symbol the detail table ce
 
 // Strike-gap filter: show strikes spaced by a gap that scales with the stock
 // price (captures meaningful moves instead of every tiny listed strike).
-let gapMode = true;
+let gapMode = false;   // default: show the full strike ladder (gap filter is opt-in)
 // Graph view: 'table' shows the chain table, 'graph' the price chart.
 let chartMode = 'table';
 // Per-pane table/graph mode, keyed "s:<sym>" (screener) or "q:<slot>" (quad).
@@ -847,7 +847,7 @@ function loadState() {
       }
     });
     selectedSymbol = (s.selectedSymbol && watchlist.has(s.selectedSymbol)) ? s.selectedSymbol : null;
-    gapMode = s.gapMode !== false;
+    gapMode = s.gapMode === true;   // default OFF → show the full strike ladder
     chartMode = s.chartMode === 'graph' ? 'graph' : 'table';
     if (s.paneCharts && typeof s.paneCharts === 'object') paneCharts = s.paneCharts;
     if (s.priceAlerts && typeof s.priceAlerts === 'object') priceAlerts = s.priceAlerts;
@@ -881,7 +881,10 @@ function applyGap(rows, spot) {
     const m = Math.abs(r.strike) % gap;
     return m < 0.001 || gap - m < 0.001;
   });
-  return on.length >= 3 ? on : rows;
+  // Never over-thin: if the coarse gap leaves too few strikes (the price-based
+  // gap can be far coarser than the exchange's actual strike step), fall back
+  // to the full ladder.
+  return on.length >= 12 ? on : rows;
 }
 
 const fmt = v => Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
