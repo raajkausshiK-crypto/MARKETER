@@ -572,11 +572,22 @@ def build_option_chain(symbol, instrument_key, expiry, expiries):
         "put": _leg(r.get("put_options")),
     } for r in data]
 
-    # Trim the dead tail: drop strikes with no activity at all (0 OI and 0 LTP
-    # on both call and put). These far-OTM strikes just render as rows of zeros.
-    live = [r for r in rows
-            if r["call"]["oi"] or r["put"]["oi"] or r["call"]["ltp"] or r["put"]["ltp"]]
-    rows = live or rows
+    # Keep a full ladder around ATM plus any strike that has activity. (The old
+    # behaviour dropped every inactive strike, which collapsed illiquid stocks /
+    # far expiries down to just 1–2 rows.) Far-OTM dead strikes outside the
+    # window are still trimmed so the tail isn't rows of zeros.
+    def _active(r):
+        return r["call"]["oi"] or r["put"]["oi"] or r["call"]["ltp"] or r["put"]["ltp"]
+
+    if rows and spot:
+        atm_idx = min(range(len(rows)), key=lambda i: abs((rows[i]["strike"] or 0) - spot))
+        window = STRIKES_EACH_SIDE if 'STRIKES_EACH_SIDE' in globals() else 20
+        keep = set(range(max(0, atm_idx - window), min(len(rows), atm_idx + window + 1)))
+        keep.update(i for i, r in enumerate(rows) if _active(r))
+        rows = [rows[i] for i in sorted(keep)]
+    else:
+        live = [r for r in rows if _active(r)]
+        rows = live or rows
 
     quote = get_quote(instrument_key)
     prev_close = get_prev_close(instrument_key, spot) or quote["close_price"] or spot
