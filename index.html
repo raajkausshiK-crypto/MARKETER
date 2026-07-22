@@ -851,7 +851,8 @@ function loadState() {
     });
     selectedSymbol = (s.selectedSymbol && watchlist.has(s.selectedSymbol)) ? s.selectedSymbol : null;
     gapValue = GAP_CHOICES.includes(s.gapValue) ? s.gapValue : 0;   // default: all strikes
-    autoLoadCategory = s.autoLoadCategory === true;
+    // Auto-load stays ON by default every load (the requested behaviour); the
+    // toggle can turn it off for the current session.
     chartMode = s.chartMode === 'graph' ? 'graph' : 'table';
     if (s.paneCharts && typeof s.paneCharts === 'object') paneCharts = s.paneCharts;
     if (s.priceAlerts && typeof s.priceAlerts === 'object') priceAlerts = s.priceAlerts;
@@ -2344,7 +2345,7 @@ let activeCat = 'Indices';
 
 // ---- Saved watchlist (personal favorites, persisted) ----
 const WL_CAT = '★ Watchlist';
-let autoLoadCategory = false;   // when on, picking a category swaps in all its stocks
+let autoLoadCategory = true;   // default ON: picking a category swaps in all its stocks
 let savedWatchlist = [];
 try { savedWatchlist = JSON.parse(localStorage.getItem('savedWatchlist') || '[]'); } catch { savedWatchlist = []; }
 function persistSavedWatchlist() { localStorage.setItem('savedWatchlist', JSON.stringify(savedWatchlist)); }
