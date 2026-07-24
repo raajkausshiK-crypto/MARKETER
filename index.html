@@ -517,14 +517,17 @@
     </div>
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <span style="color:var(--text3);font-family:var(--font-mono)">&#8377;</span>
-      <input id="premiumInput" type="number" step="0.05" min="0" placeholder="target premium e.g. 50" oninput="findByPremium()"
+      <input id="premiumInput" type="number" step="0.05" min="0" placeholder="target premium e.g. 50"
+        oninput="findByPremium()" onkeydown="if(event.key==='Enter')findByPremium()"
         class="input-dark px-3 py-2 text-sm" style="width:180px;font-family:var(--font-mono)">
       <div class="toggle-group" style="padding:2px">
         <button id="premBoth" onclick="setPremSide('both')" class="toggle-btn active">Both</button>
         <button id="premCE" onclick="setPremSide('ce')" class="toggle-btn">CE</button>
         <button id="premPE" onclick="setPremSide('pe')" class="toggle-btn">PE</button>
       </div>
+      <button onclick="findByPremium()" class="btn-primary whitespace-nowrap">Search</button>
       <span class="text-[10px]" style="color:var(--text3)">nearest across your loaded stocks</span>
+
     </div>
     <div id="premiumResults"><div class="text-[11px]" style="color:var(--text3)">Enter a premium to find the nearest option strikes.</div></div>
   </section>
