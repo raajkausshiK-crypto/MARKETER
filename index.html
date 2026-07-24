@@ -448,6 +448,10 @@
         class="tool-btn text-[12px] font-semibold px-2 h-9" style="color:var(--text2)">
         <option value="">Expiry: auto</option>
       </select>
+      <button id="premiumBtn" onclick="togglePremium()" title="Find option strikes by premium (LTP)"
+        class="tool-btn text-[12px] font-semibold px-3 h-9 flex items-center gap-1.5" style="color:var(--text2)">
+        <span>&#127919;</span> Find ₹
+      </button>
       <button id="restartBtn" onclick="restartConnection()" title="Restart live feed"
         class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text3)">
         &#8635;
@@ -503,6 +507,26 @@
         <div id="moversLosers"><div class="text-[11px]" style="color:var(--text3)">Loading…</div></div>
       </div>
     </div>
+  </section>
+
+  <!-- ===== PREMIUM FINDER ===== -->
+  <section id="premiumPanel" class="hidden surface-raised rounded-2xl p-4 mb-5 fade-in">
+    <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+      <span class="label">Find strikes by premium <span id="premiumCount" style="color:var(--text3)"></span></span>
+      <button onclick="togglePremium()" title="Close" class="tool-btn w-8 h-8 flex items-center justify-center" style="color:var(--text3)">&#10005;</button>
+    </div>
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
+      <span style="color:var(--text3);font-family:var(--font-mono)">&#8377;</span>
+      <input id="premiumInput" type="number" step="0.05" min="0" placeholder="target premium e.g. 50" oninput="findByPremium()"
+        class="input-dark px-3 py-2 text-sm" style="width:180px;font-family:var(--font-mono)">
+      <div class="toggle-group" style="padding:2px">
+        <button id="premBoth" onclick="setPremSide('both')" class="toggle-btn active">Both</button>
+        <button id="premCE" onclick="setPremSide('ce')" class="toggle-btn">CE</button>
+        <button id="premPE" onclick="setPremSide('pe')" class="toggle-btn">PE</button>
+      </div>
+      <span class="text-[10px]" style="color:var(--text3)">nearest across your loaded stocks</span>
+    </div>
+    <div id="premiumResults"><div class="text-[11px]" style="color:var(--text3)">Enter a premium to find the nearest option strikes.</div></div>
   </section>
 
   <div id="dimmer"></div>
@@ -782,6 +806,78 @@ function renderMoverRows(rows, up) {
       </span>
     </div>`;
   }).join('');
+}
+
+// ========================= PREMIUM FINDER =========================
+// Find option strikes (across the loaded stocks) whose premium (LTP) is nearest
+// a target amount the user types.
+let _premSide = 'both';
+function togglePremium() {
+  const p = document.getElementById('premiumPanel');
+  const show = p.classList.contains('hidden');
+  p.classList.toggle('hidden', !show);
+  document.getElementById('premiumBtn').classList.toggle('active', show);
+  if (show) { const i = document.getElementById('premiumInput'); i.focus(); findByPremium(); }
+}
+function setPremSide(side) {
+  _premSide = side;
+  document.getElementById('premBoth').classList.toggle('active', side === 'both');
+  document.getElementById('premCE').classList.toggle('active', side === 'ce');
+  document.getElementById('premPE').classList.toggle('active', side === 'pe');
+  findByPremium();
+}
+function findByPremium() {
+  const box = document.getElementById('premiumResults');
+  const target = parseFloat(document.getElementById('premiumInput').value);
+  if (!(target >= 0) || isNaN(target)) {
+    box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">Enter a premium to find the nearest option strikes.</div>`;
+    document.getElementById('premiumCount').textContent = '';
+    return;
+  }
+  const hits = [];
+  watchlist.forEach((d, sym) => {
+    if (!d.rows || !d.rows.length) return;
+    d.rows.forEach(r => {
+      if (_premSide !== 'pe') {
+        const ltp = r.call?.ltp || 0;
+        if (ltp > 0) hits.push({ sym, strike: r.strike, side: 'CE', ltp, diff: Math.abs(ltp - target), spot: d.spot, expiry: d.expiry });
+      }
+      if (_premSide !== 'ce') {
+        const ltp = r.put?.ltp || 0;
+        if (ltp > 0) hits.push({ sym, strike: r.strike, side: 'PE', ltp, diff: Math.abs(ltp - target), spot: d.spot, expiry: d.expiry });
+      }
+    });
+  });
+  hits.sort((a, b) => a.diff - b.diff);
+  const top = hits.slice(0, 40);
+  document.getElementById('premiumCount').textContent = hits.length ? `· ${hits.length} options scanned` : '';
+  if (!top.length) {
+    box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">No option data yet — add stocks and start live data.</div>`;
+    return;
+  }
+  box.innerHTML = `<div style="max-height:340px;overflow-y:auto">` + top.map(h => {
+    const col = h.side === 'CE' ? 'var(--green)' : 'var(--red)';
+    const exact = h.diff < 0.005;
+    return `<div class="mover-row" onclick="openFromPremium('${h.sym}',${h.strike})" title="Open ${h.sym} chain at ${h.strike}">
+      <span style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:var(--font-display);font-weight:700;font-size:12px;color:var(--text1);min-width:96px">${h.sym}</span>
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text2)">${h.strike}</span>
+        <span style="font-size:10px;font-weight:700;color:${col}">${h.side}</span>
+      </span>
+      <span style="display:flex;align-items:center;gap:12px;font-family:var(--font-mono);font-size:11px">
+        <span style="color:var(--text1);font-weight:700">&#8377;${fmt(h.ltp)}</span>
+        <span style="color:${exact ? 'var(--cyan)' : 'var(--text3)'};min-width:60px;text-align:right">${exact ? 'exact' : '±' + fmt(h.diff)}</span>
+      </span>
+    </div>`;
+  }).join('') + `</div>`;
+}
+function openFromPremium(sym, strike) {
+  if (!watchlist.has(sym)) return;
+  selectSymbol(sym);
+  if (viewMode !== 'single') setViewMode('single');
+  detailCurSym = null;
+  renderDetail();
+  toast(`${sym} — strike ${strike}`, 'info');
 }
 
 // ========================= STATE =========================
@@ -1193,6 +1289,7 @@ function onDataUpdated(sym) {
   checkAlerts(sym);
   renderCards();
   renderMonthSwitcher();
+  if (!document.getElementById('premiumPanel').classList.contains('hidden')) findByPremium();
   if (viewMode === 'single') {
     if (selectedSymbol === sym) renderDetail();
   } else if (viewMode === 'quad') {
