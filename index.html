@@ -444,6 +444,10 @@
         class="tool-btn text-[12px] font-semibold px-3 h-9 flex items-center gap-1.5" style="color:var(--text2)">
         <span>&#128200;</span> Movers
       </button>
+      <select id="monthSwitcher" onchange="setGlobalMonth(this.value)" title="Switch expiry month for all stocks"
+        class="tool-btn text-[12px] font-semibold px-2 h-9" style="color:var(--text2)">
+        <option value="">Expiry: auto</option>
+      </select>
       <button id="restartBtn" onclick="restartConnection()" title="Restart live feed"
         class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text3)">
         &#8635;
@@ -1118,6 +1122,16 @@ async function fetchChain(sym, expiry) {
         entry.expiry = data.expiry || null;
       }
       entry.expiries = data.expiries || [];
+      // If a global expiry month is chosen, steer this stock to its expiry in
+      // that month (no-op once it already matches, so no refetch loop).
+      if (globalMonth) {
+        const inMonth = (entry.expiries || []).filter(e => e.slice(0, 7) === globalMonth);
+        const want = inMonth.length ? inMonth[inMonth.length - 1] : null;
+        if (want && entry.expiry !== want) {
+          entry.expiry = want;
+          if (connected || IS_REMOTE) fetchChain(sym, want);
+        }
+      }
       entry.rows = data.rows || [];
       entry.cashOnly = !!data.cash_only;
       entry.pcr = data.pcr;
@@ -1178,6 +1192,7 @@ async function fetchPrevClose(sym) {
 function onDataUpdated(sym) {
   checkAlerts(sym);
   renderCards();
+  renderMonthSwitcher();
   if (viewMode === 'single') {
     if (selectedSymbol === sym) renderDetail();
   } else if (viewMode === 'quad') {
@@ -2310,6 +2325,47 @@ function changeExpiry() {
   const entry = watchlist.get(selectedSymbol);
   if (entry) entry.expiry = exp;
   if (connected || IS_REMOTE) fetchChain(selectedSymbol, exp);
+}
+
+// ---- Global expiry-month switcher (header) ----
+let globalMonth = '';   // "YYYY-MM" or "" = per-stock default
+const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function monthLabel(ym) {                          // "2026-08" → "Aug 2026"
+  const [y, m] = ym.split('-');
+  return `${_MONTHS[(+m) - 1]} ${y}`;
+}
+// Rebuild the header month dropdown from the expiries currently on screen.
+function renderMonthSwitcher() {
+  const sel = document.getElementById('monthSwitcher');
+  if (!sel) return;
+  const months = new Set();
+  watchlist.forEach(d => (d.expiries || []).forEach(e => { if (/^\d{4}-\d{2}/.test(e)) months.add(e.slice(0, 7)); }));
+  const list = [...months].sort();
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">Expiry: auto</option>` +
+    list.map(ym => `<option value="${ym}"${ym === globalMonth ? ' selected' : ''}>${monthLabel(ym)}</option>`).join('');
+  if (globalMonth && list.includes(globalMonth)) sel.value = globalMonth;
+  else if (!globalMonth) sel.value = '';
+}
+// Apply the chosen month to every stock: pick each stock's expiry in that month
+// (the last/monthly one) and refetch.
+function setGlobalMonth(ym) {
+  globalMonth = ym || '';
+  if (globalMonth) {
+    watchlist.forEach((d, sym) => {
+      const inMonth = (d.expiries || []).filter(e => e.slice(0, 7) === globalMonth);
+      const exp = inMonth.length ? inMonth[inMonth.length - 1] : null;   // monthly = last in month
+      if (exp && exp !== d.expiry) {
+        d.expiry = exp;
+        if (connected || IS_REMOTE) fetchChain(sym, exp);
+      }
+    });
+    toast(`Expiry → ${monthLabel(globalMonth)} for all stocks`, 'success');
+  }
+  renderMonthSwitcher();
+  if (viewMode === 'single') renderDetail();
+  else if (viewMode === 'quad') renderQuad();
+  else if (viewMode === 'screener') renderScreener();
 }
 
 function addCustomStrike() {
