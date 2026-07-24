@@ -2352,26 +2352,31 @@ function renderMonthSwitcher() {
   watchlist.forEach(d => (d.expiries || []).forEach(e => { if (/^\d{4}-\d{2}/.test(e)) months.add(e.slice(0, 7)); }));
   let list = [...months].sort();
   if (!list.length) list = upcomingMonths(4);   // fallback so the dropdown isn't empty
-  const cur = sel.value;
+  // Drop a stale selection that no on-screen stock actually offers, so the
+  // internal state and the visible dropdown never disagree.
+  if (globalMonth && months.size && !list.includes(globalMonth)) globalMonth = '';
   sel.innerHTML = `<option value="">Expiry: auto</option>` +
     list.map(ym => `<option value="${ym}"${ym === globalMonth ? ' selected' : ''}>${monthLabel(ym)}</option>`).join('');
-  if (globalMonth && list.includes(globalMonth)) sel.value = globalMonth;
-  else if (!globalMonth) sel.value = '';
+  sel.value = globalMonth || '';
 }
 // Apply the chosen month to every stock: pick each stock's expiry in that month
 // (the last/monthly one) and refetch.
 function setGlobalMonth(ym) {
   globalMonth = ym || '';
   if (globalMonth) {
+    let applied = 0, total = 0;
     watchlist.forEach((d, sym) => {
+      total++;
       const inMonth = (d.expiries || []).filter(e => e.slice(0, 7) === globalMonth);
       const exp = inMonth.length ? inMonth[inMonth.length - 1] : null;   // monthly = last in month
-      if (exp && exp !== d.expiry) {
-        d.expiry = exp;
-        if (connected || IS_REMOTE) fetchChain(sym, exp);
+      if (exp) {
+        applied++;
+        if (exp !== d.expiry) { d.expiry = exp; if (connected || IS_REMOTE) fetchChain(sym, exp); }
       }
     });
-    toast(`Expiry → ${monthLabel(globalMonth)} for all stocks`, 'success');
+    if (total === 0) toast(`Expiry set to ${monthLabel(globalMonth)} — applies as you add stocks`, 'info');
+    else if (applied === 0) { toast(`No stock has a ${monthLabel(globalMonth)} expiry`, 'info'); globalMonth = ''; }
+    else toast(`Expiry → ${monthLabel(globalMonth)} · ${applied}/${total} stock${total > 1 ? 's' : ''}`, 'success');
   }
   renderMonthSwitcher();
   if (viewMode === 'single') renderDetail();
