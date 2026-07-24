@@ -2334,13 +2334,24 @@ function monthLabel(ym) {                          // "2026-08" → "Aug 2026"
   const [y, m] = ym.split('-');
   return `${_MONTHS[(+m) - 1]} ${y}`;
 }
-// Rebuild the header month dropdown from the expiries currently on screen.
+// Next N calendar months from today as "YYYY-MM" (fallback when nothing loaded).
+function upcomingMonths(n) {
+  const out = [], now = new Date();
+  for (let i = 0; i < n; i++) {
+    const dt = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    out.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return out;
+}
+// Rebuild the header month dropdown from the expiries currently on screen (or a
+// few upcoming months when nothing is loaded, so options are always available).
 function renderMonthSwitcher() {
   const sel = document.getElementById('monthSwitcher');
   if (!sel) return;
   const months = new Set();
   watchlist.forEach(d => (d.expiries || []).forEach(e => { if (/^\d{4}-\d{2}/.test(e)) months.add(e.slice(0, 7)); }));
-  const list = [...months].sort();
+  let list = [...months].sort();
+  if (!list.length) list = upcomingMonths(4);   // fallback so the dropdown isn't empty
   const cur = sel.value;
   sel.innerHTML = `<option value="">Expiry: auto</option>` +
     list.map(ym => `<option value="${ym}"${ym === globalMonth ? ' selected' : ''}>${monthLabel(ym)}</option>`).join('');
@@ -2783,6 +2794,7 @@ document.getElementById('searchInput').addEventListener('keydown', e => {
 const restored = loadState();   // bring back the saved watchlist + view settings
 renderCategories();
 renderCards();
+renderMonthSwitcher();
 updateViewToolbar();
 // A live API is always reachable now (relative when deployed, PROD_API when
 // running locally), so auto-connect and begin polling any watched symbols.
