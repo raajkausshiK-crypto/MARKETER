@@ -884,7 +884,10 @@ function findByPremium() {
     box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">${_premiumSnapshot ? 'No matches.' : 'Click Search to scan all F&O stocks.'}</div>`;
     return;
   }
-  box.innerHTML = `<div style="max-height:340px;overflow-y:auto">` + top.map(h => {
+  // Preserve the list's scroll position across re-renders so a live tick doesn't
+  // yank you back to the top while you're scrolling.
+  const prevScroll = (box.querySelector('.prem-scroll') || {}).scrollTop || 0;
+  box.innerHTML = `<div class="prem-scroll" style="max-height:340px;overflow-y:auto">` + top.map(h => {
     const col = h.side === 'CE' ? 'var(--green)' : 'var(--red)';
     const exact = h.diff < 0.005;
     return `<div class="mover-row" onclick="openFromPremium('${h.sym}',${h.strike})" title="Open ${h.sym} chain at ${h.strike}">
@@ -899,6 +902,8 @@ function findByPremium() {
       </span>
     </div>`;
   }).join('') + `</div>`;
+  const ns = box.querySelector('.prem-scroll');
+  if (ns && prevScroll) ns.scrollTop = prevScroll;
 }
 function openFromPremium(sym, strike) {
   if (!watchlist.has(sym)) { addWatchlistItem(sym); }   // add it if the scan surfaced an unloaded stock
@@ -1318,7 +1323,9 @@ function onDataUpdated(sym) {
   checkAlerts(sym);
   renderCards();
   renderMonthSwitcher();
-  if (!document.getElementById('premiumPanel').classList.contains('hidden')) findByPremium();
+  // Only live-refresh the premium finder when it's showing live loaded-stock
+  // data; the scan snapshot is static, so don't rebuild it on every tick.
+  if (!_premiumSnapshot && !document.getElementById('premiumPanel').classList.contains('hidden')) findByPremium();
   if (viewMode === 'single') {
     if (selectedSymbol === sym) renderDetail();
   } else if (viewMode === 'quad') {
