@@ -518,16 +518,15 @@
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <span style="color:var(--text3);font-family:var(--font-mono)">&#8377;</span>
       <input id="premiumInput" type="number" step="0.05" min="0" placeholder="target premium e.g. 50"
-        oninput="findByPremium()" onkeydown="if(event.key==='Enter')findByPremium()"
+        oninput="findByPremium()" onkeydown="if(event.key==='Enter')scanPremium()"
         class="input-dark px-3 py-2 text-sm" style="width:180px;font-family:var(--font-mono)">
+      <button id="premiumSearchBtn" onclick="scanPremium()" class="btn-primary whitespace-nowrap px-4 py-2">&#128269; Search</button>
       <div class="toggle-group" style="padding:2px">
         <button id="premBoth" onclick="setPremSide('both')" class="toggle-btn active">Both</button>
         <button id="premCE" onclick="setPremSide('ce')" class="toggle-btn">CE</button>
         <button id="premPE" onclick="setPremSide('pe')" class="toggle-btn">PE</button>
       </div>
-      <button onclick="findByPremium()" class="btn-primary whitespace-nowrap">Search</button>
-      <span class="text-[10px]" style="color:var(--text3)">nearest across your loaded stocks</span>
-
+      <span id="premiumScope" class="text-[10px]" style="color:var(--text3)">scans all F&amp;O stocks</span>
     </div>
     <div id="premiumResults"><div class="text-[11px]" style="color:var(--text3)">Enter a premium to find the nearest option strikes.</div></div>
   </section>
@@ -829,33 +828,60 @@ function setPremSide(side) {
   document.getElementById('premPE').classList.toggle('active', side === 'pe');
   findByPremium();
 }
+// Snapshot of every F&O strike's CE/PE premium, fetched by the Search button.
+// [ [symbol, strike, ceLtp, peLtp], ... ]
+let _premiumSnapshot = null;
+async function scanPremium() {
+  const btn = document.getElementById('premiumSearchBtn');
+  const box = document.getElementById('premiumResults');
+  const target = parseFloat(document.getElementById('premiumInput').value);
+  if (!(target >= 0) || isNaN(target)) { document.getElementById('premiumInput').focus(); return; }
+  btn.textContent = 'Scanning…'; btn.disabled = true;
+  box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">Scanning all F&O option chains… (first scan takes a few seconds)</div>`;
+  try {
+    const res = await fetch(`${API_BASE}/api/chain?premium_scan=1`, { cache: 'no-store' });
+    const d = await res.json();
+    if (d.type === 'premium_scan') {
+      _premiumSnapshot = d.rows || [];
+      document.getElementById('premiumScope').textContent = `scanned ${d.stocks} F&O stocks`;
+    } else {
+      box.innerHTML = `<div class="text-[11px]" style="color:var(--red)">${d.message || 'Scan failed'}</div>`;
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="text-[11px]" style="color:var(--red)">Scan failed — is the backend running?</div>`;
+  }
+  btn.innerHTML = '&#128269; Search'; btn.disabled = false;
+  findByPremium();
+}
 function findByPremium() {
   const box = document.getElementById('premiumResults');
   const target = parseFloat(document.getElementById('premiumInput').value);
   if (!(target >= 0) || isNaN(target)) {
-    box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">Enter a premium to find the nearest option strikes.</div>`;
+    box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">Enter a premium, then Search to scan all F&O stocks.</div>`;
     document.getElementById('premiumCount').textContent = '';
     return;
   }
   const hits = [];
-  watchlist.forEach((d, sym) => {
-    if (!d.rows || !d.rows.length) return;
-    d.rows.forEach(r => {
-      if (_premSide !== 'pe') {
-        const ltp = r.call?.ltp || 0;
-        if (ltp > 0) hits.push({ sym, strike: r.strike, side: 'CE', ltp, diff: Math.abs(ltp - target), spot: d.spot, expiry: d.expiry });
-      }
-      if (_premSide !== 'ce') {
-        const ltp = r.put?.ltp || 0;
-        if (ltp > 0) hits.push({ sym, strike: r.strike, side: 'PE', ltp, diff: Math.abs(ltp - target), spot: d.spot, expiry: d.expiry });
-      }
+  if (_premiumSnapshot && _premiumSnapshot.length) {
+    // Filter the universe snapshot (all F&O stocks).
+    _premiumSnapshot.forEach(([sym, strike, ce, pe]) => {
+      if (_premSide !== 'pe' && ce > 0) hits.push({ sym, strike, side: 'CE', ltp: ce, diff: Math.abs(ce - target) });
+      if (_premSide !== 'ce' && pe > 0) hits.push({ sym, strike, side: 'PE', ltp: pe, diff: Math.abs(pe - target) });
     });
-  });
+  } else {
+    // Fallback: search the loaded stocks (before a universe scan).
+    watchlist.forEach((d, sym) => {
+      (d.rows || []).forEach(r => {
+        if (_premSide !== 'pe' && (r.call?.ltp || 0) > 0) hits.push({ sym, strike: r.strike, side: 'CE', ltp: r.call.ltp, diff: Math.abs(r.call.ltp - target) });
+        if (_premSide !== 'ce' && (r.put?.ltp || 0) > 0) hits.push({ sym, strike: r.strike, side: 'PE', ltp: r.put.ltp, diff: Math.abs(r.put.ltp - target) });
+      });
+    });
+  }
   hits.sort((a, b) => a.diff - b.diff);
-  const top = hits.slice(0, 40);
-  document.getElementById('premiumCount').textContent = hits.length ? `· ${hits.length} options scanned` : '';
+  const top = hits.slice(0, 60);
+  document.getElementById('premiumCount').textContent = hits.length ? `· ${hits.length} options` : '';
   if (!top.length) {
-    box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">No option data yet — add stocks and start live data.</div>`;
+    box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">${_premiumSnapshot ? 'No matches.' : 'Click Search to scan all F&O stocks.'}</div>`;
     return;
   }
   box.innerHTML = `<div style="max-height:340px;overflow-y:auto">` + top.map(h => {
@@ -875,7 +901,7 @@ function findByPremium() {
   }).join('') + `</div>`;
 }
 function openFromPremium(sym, strike) {
-  if (!watchlist.has(sym)) return;
+  if (!watchlist.has(sym)) { addWatchlistItem(sym); }   // add it if the scan surfaced an unloaded stock
   selectSymbol(sym);
   if (viewMode !== 'single') setViewMode('single');
   detailCurSym = null;

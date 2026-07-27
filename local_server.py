@@ -101,11 +101,14 @@ class Handler(SimpleHTTPRequestHandler):
             expiry = params.get("expiry", [None])[0] or None
             want_candles = bool(params.get("candles"))
             want_movers = bool(params.get("movers"))
+            want_premium = bool(params.get("premium_scan"))
             interval = params.get("interval", [None])[0]
             if not interval and params.get("daily"):
                 interval = "day"
             try:
-                if want_movers:
+                if want_premium:
+                    payload = backend.get_premium_scan()
+                elif want_movers:
                     payload = backend.get_movers()
                 elif want_candles:
                     payload = backend.get_candles_cached(symbol, interval=interval)
