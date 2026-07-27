@@ -848,6 +848,55 @@ def get_movers(top=10):
     return payload
 
 
+# ------------------------------------------------------------------ premium scan
+# A snapshot of every strike's CE/PE premium (LTP) across the F&O equity
+# universe, so the frontend can find options near any target price. Each stock
+# is one option-chain call (lightweight — no quote/prev-close), run in parallel
+# and cached, because the client filters the same snapshot as the user types.
+_PREMIUM_CACHE = {"t": 0.0, "data": None}
+_PREMIUM_TTL = 60.0
+
+
+def _chain_ltps(sym_key):
+    sym, instrument_key = sym_key
+    try:
+        exps = get_expiries(instrument_key)
+        if not exps:
+            return []
+        data = _get("/v2/option/chain", {"instrument_key": instrument_key,
+                                         "expiry_date": exps[0]}).get("data", []) or []
+        out = []
+        for r in data:
+            strike = r.get("strike_price")
+            ce = ((r.get("call_options") or {}).get("market_data") or {})
+            pe = ((r.get("put_options") or {}).get("market_data") or {})
+            try:
+                cl, pl = float(ce.get("ltp") or 0), float(pe.get("ltp") or 0)
+            except (TypeError, ValueError):
+                cl = pl = 0.0
+            if cl > 0 or pl > 0:
+                out.append([sym, strike, round(cl, 2), round(pl, 2)])
+        return out
+    except Exception:
+        return []
+
+
+def get_premium_scan():
+    now = time.time()
+    if _PREMIUM_CACHE["data"] and (now - _PREMIUM_CACHE["t"]) < _PREMIUM_TTL:
+        return _PREMIUM_CACHE["data"]
+    from concurrent.futures import ThreadPoolExecutor
+    rows = []
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        for res in ex.map(_chain_ltps, _MOVERS_UNIVERSE):
+            rows.extend(res)
+    payload = {"type": "premium_scan", "rows": rows, "stocks": len({r[0] for r in rows})}
+    if rows:
+        _PREMIUM_CACHE["t"] = now
+        _PREMIUM_CACHE["data"] = payload
+    return payload
+
+
 # ------------------------------------------------------------------ handler
 class handler(BaseHTTPRequestHandler):
     """Classic Vercel Python serverless function entrypoint."""
@@ -859,12 +908,15 @@ class handler(BaseHTTPRequestHandler):
         expiry = params.get("expiry", [None])[0] or None
         want_candles = bool(params.get("candles"))
         want_movers = bool(params.get("movers"))
+        want_premium = bool(params.get("premium_scan"))
         interval = params.get("interval", [None])[0]
         if not interval and params.get("daily"):
             interval = "day"   # backwards-compat with ?daily=1
 
         try:
-            if want_movers:
+            if want_premium:
+                payload = get_premium_scan()
+            elif want_movers:
                 payload = get_movers()
             elif want_candles:
                 payload = get_candles_cached(symbol, interval=interval)
