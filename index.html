@@ -2089,8 +2089,10 @@ function toggleGraph() {
 }
 
 let _fsSym = null, _fsTf = '1d';
-// Zoom/pan state for the fullscreen chart.
-let _fsFull = [], _fsWin = null, _fsWinKey = '', _fsPan = null;
+// Viewport state for the fullscreen chart: fixed-width candles (bw px each) and
+// a fractional scroll position (index of the left edge), like a real trading
+// chart — so you can slide past the last bar into empty space.
+let _fsFull = [], _fsView = null, _fsViewKey = '', _fsPan = null;
 const FS_TIMEFRAMES = [
   { key: '1m',  label: '1m',   range: 1   },
   { key: '5m',  label: '5m',   range: 5   },
@@ -2209,43 +2211,58 @@ function renderFsChart() {
     useDaily = e.interval === 'day';
     tfmt = useDaily ? 'date' : 'time';
   }
-  // Apply the zoom/pan window into the timeframe candle set. Reset it whenever
-  // the symbol or timeframe changes.
   _fsFull = candles;
-  const key = _fsSym + '|' + _fsTf;
-  if (!_fsWin || _fsWinKey !== key) { _fsWin = { start: 0, end: candles.length - 1 }; _fsWinKey = key; }
-  _fsWin.start = Math.max(0, Math.min(_fsWin.start, candles.length - 2));
-  _fsWin.end = Math.max(_fsWin.start + 1, Math.min(_fsWin.end, candles.length - 1));
-  candles = candles.slice(_fsWin.start, _fsWin.end + 1);
-  const n = candles.length;
-  if (!n) return;
+  const full = candles;
+  const N = full.length;
+  if (!N) return;
 
   updateFsPrice();
 
   const GREEN = '#22c55e', RED = '#ef4444';
   const W = 1200, VOL_H = 60, GAP = 8, P = { t: 16, r: 66, b: 28, l: 10 };
-  const hasVol = candles.some(c => (c[5] || 0) > 0);
+  const iw = W - P.l - P.r;
+  const hasVol = full.some(c => (c[5] || 0) > 0);
   const totalVolH = hasVol ? VOL_H + GAP : 0;
   const H = 440 + totalVolH;
-  const iw = W - P.l - P.r;
   const ih = H - P.t - P.b - totalVolH;
+
+  // Fixed-width candle viewport (reset on symbol/timeframe change).
+  const key = _fsSym + '|' + _fsTf;
+  if (!_fsView || _fsViewKey !== key) {
+    const targetVis = Math.min(N + 12, 150);                      // show up to ~150 bars
+    const bw0 = Math.max(4, Math.min(14, iw / targetVis));
+    const rightPad0 = 12;                                         // empty room on the right
+    _fsView = { bw: bw0, scroll: N + rightPad0 - iw / bw0 };
+    _fsViewKey = key;
+  }
+  let bw = Math.max(2, Math.min(90, _fsView.bw));
+  const visBars = iw / bw;
+  const minScroll = -Math.max(4, visBars * 0.05);
+  const maxScroll = N - Math.max(3, visBars * 0.25);              // slide past the last bar
+  let scroll = Math.max(minScroll, Math.min(_fsView.scroll, maxScroll));
+  _fsView.bw = bw; _fsView.scroll = scroll;
+
+  const i0 = Math.max(0, Math.floor(scroll));
+  const i1 = Math.min(N - 1, Math.ceil(scroll + visBars));
+  candles = full.slice(i0, i1 + 1);                              // visible slice (reuse outer var)
+  const n = candles.length;
+  if (!n) return;
 
   const allHi = candles.map(c => c[2]), allLo = candles.map(c => c[3]);
   const lo = Math.min(...allLo), hi = Math.max(...allHi);
   const span = (hi - lo) || 1;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
-  const gap2 = iw / n;
-  // Cap the candle width so short/sparse timeframes (e.g. 1m = 1 bar) don't
-  // render as one giant block — professional charts keep bars a fixed size.
-  const cw = Math.max(2, Math.min(22, gap2 * 0.88));
-  const wickW = Math.max(1, cw * 0.15);
+  const cx0 = P.l + (i0 - scroll) * bw;                          // left edge of candles[0]'s slot
+  const xCenter = j => cx0 + (j + 0.5) * bw;
+  const cw = Math.max(1.5, Math.min(bw * 0.72, 18));
+  const wickW = Math.max(0.8, cw * 0.15);
   const maxVol = hasVol ? Math.max(...candles.map(c => c[5] || 0)) || 1 : 1;
   const volBase = P.t + ih + GAP + VOL_H;
 
   let sticks = '', volBars = '';
   for (let i = 0; i < n; i++) {
     const [ts, o, h2, l2, c, vol] = candles[i];
-    const cx = P.l + (i + 0.5) * gap2;
+    const cx = xCenter(i);
     const up = c >= o;
     const col = up ? GREEN : RED;
     const bodyTop = y(Math.max(o, c)), bodyBot = y(Math.min(o, c));
@@ -2262,26 +2279,27 @@ function renderFsChart() {
   const D = ts => new Date(ts);
   const dOpt = { day: '2-digit', month: 'short' };
   const tOpt = { hour: '2-digit', minute: '2-digit', hour12: false };
-  // x-axis: keep it compact (date for multi-day spans, time for a single day).
   const lbl = ts => useDaily ? D(ts).toLocaleDateString('en-IN', dOpt) : D(ts).toLocaleTimeString('en-IN', tOpt);
   const fmtVol = v => { if (v >= 1e7) return (v/1e7).toFixed(1)+'Cr'; if (v >= 1e5) return (v/1e5).toFixed(1)+'L'; if (v >= 1e3) return (v/1e3).toFixed(0)+'K'; return String(Math.round(v)); };
 
-  const tLabels = [0, Math.floor(n * 0.25), Math.floor(n * 0.5), Math.floor(n * 0.75), n - 1];
+  const tLabels = [0, Math.floor(n * 0.25), Math.floor(n * 0.5), Math.floor(n * 0.75), n - 1]
+    .filter((v, i, a) => a.indexOf(v) === i);
 
-  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap: gap2, lo, hi, span, W, H, n, isDaily: useDaily, tfmt, hasVol, volBase };
+  const geom = { Pl: P.l, cx0, Pr: P.r, Pt: P.t, ih, gap: bw, lo, hi, span, W, H, n, isDaily: useDaily, tfmt, hasVol, volBase };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
-  document.getElementById('fsBody').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" data-chart="${chartData}" style="cursor:crosshair" xmlns="http://www.w3.org/2000/svg">
+  document.getElementById('fsBody').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" data-chart="${chartData}" style="cursor:grab" xmlns="http://www.w3.org/2000/svg">
+    <defs><clipPath id="fsPlotClip"><rect x="${P.l}" y="${P.t}" width="${(iw).toFixed(1)}" height="${(ih + totalVolH).toFixed(1)}"/></clipPath></defs>
     ${grid.map(v => `
       <line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1c1c24" stroke-dasharray="4,4"/>
       <text x="${W - P.r + 8}" y="${(y(v) + 4).toFixed(1)}" fill="#9898a8" font-size="12" font-family="Roboto, sans-serif">${fmt(v)}</text>`).join('')}
-    ${sticks}
+    <g clip-path="url(#fsPlotClip)">${sticks}</g>
     ${hasVol ? `
       <line x1="${P.l}" y1="${(P.t + ih + GAP).toFixed(1)}" x2="${W - P.r}" y2="${(P.t + ih + GAP).toFixed(1)}" stroke="#1c1c24" stroke-width="0.5"/>
       <text x="${W - P.r + 8}" y="${(P.t + ih + GAP + 14).toFixed(1)}" fill="#9898a8" font-size="11" font-family="Roboto, sans-serif">${fmtVol(maxVol)}</text>
       <text x="${W - P.r + 8}" y="${volBase.toFixed(1)}" fill="#5c5c6e" font-size="11" font-family="Roboto, sans-serif">Vol</text>
-      ${volBars}` : ''}
-    ${tLabels.map(i => `<text x="${(P.l + (i + 0.5) * gap2).toFixed(1)}" y="${H - 8}" fill="#9898a8" font-size="11" text-anchor="middle" font-family="Roboto, sans-serif">${lbl(candles[i][0])}</text>`).join('')}
+      <g clip-path="url(#fsPlotClip)">${volBars}</g>` : ''}
+    ${tLabels.map(i => `<text x="${xCenter(i).toFixed(1)}" y="${H - 8}" fill="#9898a8" font-size="11" text-anchor="middle" font-family="Roboto, sans-serif">${lbl(candles[i][0])}</text>`).join('')}
     <g class="cx-layer" style="display:none;pointer-events:none">
       <line class="cx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
       <line class="cx-h" x1="${P.l}" x2="${(W - P.r).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
@@ -2321,32 +2339,32 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFsGraph
 
 // ---- Fullscreen chart zoom (wheel) + pan (drag) + reset (double-click) ----
 function _fsOpen() { return document.getElementById('fsOverlay').classList.contains('open'); }
-function fsResetZoom() { _fsWin = null; if (_fsSym && _fsOpen()) renderFsChart(); }
+function fsResetZoom() { _fsView = null; if (_fsSym && _fsOpen()) renderFsChart(); }
+// bar-width in viewBox px per screen px (viewBox W=1200 stretched to the pane).
+function _fsVbScale(rectW) { return 1200 / rectW; }
 function _fsWheel(ev) {
-  if (!_fsOpen() || !_fsFull.length || !_fsWin) return;
+  if (!_fsOpen() || !_fsFull.length || !_fsView) return;
   ev.preventDefault();
   const rect = ev.currentTarget.getBoundingClientRect();
-  const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-  const visN = _fsWin.end - _fsWin.start + 1;
-  const anchor = _fsWin.start + frac * (visN - 1);           // candle under cursor
-  let newN = Math.round(visN * (ev.deltaY < 0 ? 0.82 : 1.22)); // in / out
-  newN = Math.max(10, Math.min(_fsFull.length, newN));
-  let start = Math.round(anchor - frac * (newN - 1));
-  start = Math.max(0, Math.min(start, _fsFull.length - newN));
-  _fsWin = { start, end: start + newN - 1 };
+  const P_l = 10, iw = 1200 - 10 - 66;
+  const mx = (ev.clientX - rect.left) * _fsVbScale(rect.width);   // cursor x in viewBox units
+  const barAtCursor = _fsView.scroll + (mx - P_l) / _fsView.bw;   // fractional bar index under cursor
+  let bw = _fsView.bw * (ev.deltaY < 0 ? 1.2 : 1 / 1.2);          // wheel up = zoom in (bigger bars)
+  bw = Math.max(2, Math.min(90, bw));
+  _fsView.bw = bw;
+  _fsView.scroll = barAtCursor - (mx - P_l) / bw;                 // keep the cursor bar fixed
   renderFsChart();
 }
 function _fsDown(ev) {
-  if (!_fsOpen() || !_fsWin || ev.button !== 0) return;
-  _fsPan = { x: ev.clientX, start: _fsWin.start, end: _fsWin.end, w: ev.currentTarget.getBoundingClientRect().width };
+  if (!_fsOpen() || !_fsView || ev.button !== 0) return;
+  _fsPan = { x: ev.clientX, scroll: _fsView.scroll, bw: _fsView.bw, w: ev.currentTarget.getBoundingClientRect().width };
   document.getElementById('fsBody').style.cursor = 'grabbing';
 }
 function _fsMove(ev) {
   if (!_fsPan || !_fsFull.length) return;
-  const visN = _fsPan.end - _fsPan.start + 1;
-  const shift = Math.round(-((ev.clientX - _fsPan.x) / _fsPan.w) * visN);
-  let start = Math.max(0, Math.min(_fsPan.start + shift, _fsFull.length - visN));
-  if (start !== _fsWin.start) { _fsWin = { start, end: start + visN - 1 }; renderFsChart(); }
+  const dxVb = (ev.clientX - _fsPan.x) * _fsVbScale(_fsPan.w);    // drag in viewBox units
+  _fsView.scroll = _fsPan.scroll - dxVb / _fsPan.bw;             // slide by whole bars
+  renderFsChart();
 }
 function _fsUp() { if (_fsPan) { _fsPan = null; document.getElementById('fsBody').style.cursor = ''; } }
 (function attachFsZoom() {
@@ -2997,10 +3015,11 @@ function chartCrosshair(ev) {
     return;
   }
 
-  let i = Math.round((loc.x - g.Pl) / g.gap - 0.5);
+  const cx0 = (g.cx0 != null) ? g.cx0 : g.Pl;        // candle anchor (viewport charts differ from plot-left)
+  let i = Math.round((loc.x - cx0) / g.gap - 0.5);
   i = Math.max(0, Math.min(g.n - 1, i));
   const cand = c[i];                                 // [ts, o, h, l, c, vol]
-  const cx = g.Pl + (i + 0.5) * g.gap;
+  const cx = cx0 + (i + 0.5) * g.gap;
   const my = Math.max(plotT, Math.min(plotB, loc.y));
   const priceAt = g.lo + (1 - (my - g.Pt) / g.ih) * g.span;
   const closeY = g.Pt + (1 - (cand[4] - g.lo) / g.span) * g.ih;
