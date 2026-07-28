@@ -2022,6 +2022,8 @@ function toggleGraph() {
 }
 
 let _fsSym = null, _fsTf = '1d';
+// Zoom/pan state for the fullscreen chart.
+let _fsFull = [], _fsWin = null, _fsWinKey = '', _fsPan = null;
 const FS_TIMEFRAMES = [
   { key: '1m',  label: '1m',   range: 1   },
   { key: '5m',  label: '5m',   range: 5   },
@@ -2089,7 +2091,10 @@ function renderFsTfBar() {
   bar.innerHTML = FS_TIMEFRAMES.map(tf => {
     const active = tf.key === _fsTf;
     return `<button class="tf-btn${active ? ' active' : ''}" onclick="setFsTf('${tf.key}')">${tf.label}</button>`;
-  }).join('');
+  }).join('') +
+    `<span style="flex:1"></span>` +
+    `<button class="tf-btn" onclick="fsResetZoom()" title="Reset zoom (or double-click the chart)">&#10530; Fit</button>` +
+    `<span class="tf-btn" style="pointer-events:none;opacity:.6">scroll = zoom · drag = pan</span>`;
 }
 
 function setFsTf(key) {
@@ -2121,6 +2126,14 @@ function renderFsChart() {
     useDaily = e.interval === 'day';
     tfmt = useDaily ? 'date' : 'time';
   }
+  // Apply the zoom/pan window into the timeframe candle set. Reset it whenever
+  // the symbol or timeframe changes.
+  _fsFull = candles;
+  const key = _fsSym + '|' + _fsTf;
+  if (!_fsWin || _fsWinKey !== key) { _fsWin = { start: 0, end: candles.length - 1 }; _fsWinKey = key; }
+  _fsWin.start = Math.max(0, Math.min(_fsWin.start, candles.length - 2));
+  _fsWin.end = Math.max(_fsWin.start + 1, Math.min(_fsWin.end, candles.length - 1));
+  candles = candles.slice(_fsWin.start, _fsWin.end + 1);
   const n = candles.length;
   if (!n) return;
 
@@ -2222,6 +2235,46 @@ function closeFsGraph() {
   _stopFsLive();
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeFsGraph(); });
+
+// ---- Fullscreen chart zoom (wheel) + pan (drag) + reset (double-click) ----
+function _fsOpen() { return document.getElementById('fsOverlay').classList.contains('open'); }
+function fsResetZoom() { _fsWin = null; if (_fsSym && _fsOpen()) renderFsChart(); }
+function _fsWheel(ev) {
+  if (!_fsOpen() || !_fsFull.length || !_fsWin) return;
+  ev.preventDefault();
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+  const visN = _fsWin.end - _fsWin.start + 1;
+  const anchor = _fsWin.start + frac * (visN - 1);           // candle under cursor
+  let newN = Math.round(visN * (ev.deltaY < 0 ? 0.82 : 1.22)); // in / out
+  newN = Math.max(10, Math.min(_fsFull.length, newN));
+  let start = Math.round(anchor - frac * (newN - 1));
+  start = Math.max(0, Math.min(start, _fsFull.length - newN));
+  _fsWin = { start, end: start + newN - 1 };
+  renderFsChart();
+}
+function _fsDown(ev) {
+  if (!_fsOpen() || !_fsWin || ev.button !== 0) return;
+  _fsPan = { x: ev.clientX, start: _fsWin.start, end: _fsWin.end, w: ev.currentTarget.getBoundingClientRect().width };
+  document.getElementById('fsBody').style.cursor = 'grabbing';
+}
+function _fsMove(ev) {
+  if (!_fsPan || !_fsFull.length) return;
+  const visN = _fsPan.end - _fsPan.start + 1;
+  const shift = Math.round(-((ev.clientX - _fsPan.x) / _fsPan.w) * visN);
+  let start = Math.max(0, Math.min(_fsPan.start + shift, _fsFull.length - visN));
+  if (start !== _fsWin.start) { _fsWin = { start, end: start + visN - 1 }; renderFsChart(); }
+}
+function _fsUp() { if (_fsPan) { _fsPan = null; document.getElementById('fsBody').style.cursor = ''; } }
+(function attachFsZoom() {
+  const body = document.getElementById('fsBody');
+  if (!body) return;
+  body.addEventListener('wheel', _fsWheel, { passive: false });
+  body.addEventListener('mousedown', _fsDown);
+  body.addEventListener('dblclick', fsResetZoom);
+  document.addEventListener('mousemove', _fsMove);
+  document.addEventListener('mouseup', _fsUp);
+})();
 
 // ========================= STOCK PRICE GRAPH =========================
 // Real price chart from Upstox candles (intraday 1-min; daily when the
