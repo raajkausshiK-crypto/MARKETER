@@ -1660,11 +1660,11 @@ function updateCard(el, sym, d) {
       `<span title="Volume" style="color:var(--cyan)">Vol: ${fmtOI(d.dayVolume || 0)}</span>` +
       (priceAlerts[sym] ? `<span style="color:var(--amber)" title="Alert active">&#128276;</span>` : '') +
     `</div>` +
-    `<div class="flex gap-2 mt-1 flex-wrap" style="font-family:var(--font-mono);font-size:10px;letter-spacing:.01em;color:var(--text3)">` +
-      `<span>O:<b style="color:var(--text2)">${fmt(d.dayOpen||0)}</b></span>` +
-      `<span>H:<b style="color:var(--green)">${fmt(d.dayHigh||0)}</b></span>` +
-      `<span>L:<b style="color:var(--red)">${fmt(d.dayLow||0)}</b></span>` +
-      `<span title="Previous day close">PC:<b style="color:var(--amber)">${fmt(prevClose)}</b></span>` +
+    `<div class="flex flex-col gap-1 mt-2" style="font-family:var(--font-mono);font-size:15px;font-weight:800;letter-spacing:.01em;color:var(--text3)">` +
+      `<span>O: <b style="color:var(--text2)">${fmt(d.dayOpen||0)}</b></span>` +
+      `<span>H: <b style="color:var(--green)">${fmt(d.dayHigh||0)}</b></span>` +
+      `<span>L: <b style="color:var(--red)">${fmt(d.dayLow||0)}</b></span>` +
+      `<span title="Previous day close">PC: <b style="color:var(--amber)">${fmt(prevClose)}</b></span>` +
     `</div>`;
 }
 
