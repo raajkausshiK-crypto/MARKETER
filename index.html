@@ -2182,7 +2182,23 @@ function renderFsChart() {
       document.getElementById('fsBody').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text2);font-family:var(--font-display);font-size:16px">Loading ' + tf.label + ' chart…</div>';
       return;
     }
-    candles = de.candles.slice(-tf.bars);
+    let series = de.candles;
+    // The 30-min history lags a day behind the live 1-min feed, so 1W/1M would
+    // end yesterday while 1D shows today. Aggregate today's 1-min bars into
+    // 30-min bars and append them so the whole sequence ends on the same bar.
+    if (tf.interval === '30minute') {
+      const ie = candleCache.get(_fsSym);
+      const intraday = (ie && ie.candles) || [];
+      if (intraday.length) {
+        const todayKey = String(intraday[intraday.length - 1][0]).slice(0, 10);
+        const lastKey = series.length ? String(series[series.length - 1][0]).slice(0, 10) : '';
+        if (lastKey !== todayKey) {
+          const todayBars = aggregateCandles(intraday.filter(c => String(c[0]).slice(0, 10) === todayKey), 30);
+          if (todayBars.length) series = series.concat(todayBars);
+        }
+      }
+    }
+    candles = series.slice(-tf.bars);
     useDaily = true;              // multi-day span
     tfmt = 'datetime';            // 30-min bars → date + time
   } else {
