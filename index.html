@@ -298,6 +298,8 @@
       background: var(--bg); margin-bottom: 4px; cursor: pointer; transition: all .12s ease;
     }
     .mover-row:hover { border-color: var(--border3); background: var(--bg3); }
+    .news-item { transition: all .12s ease; }
+    .news-item:hover { border-color: var(--border3) !important; background: var(--bg3) !important; }
 
     /* Logo */
     .logo-mark {
@@ -452,6 +454,10 @@
         class="tool-btn text-[12px] font-semibold px-3 h-9 flex items-center gap-1.5" style="color:var(--text2)">
         <span>&#127919;</span> Find ₹
       </button>
+      <button id="newsBtn" onclick="toggleNews()" title="Latest stock news"
+        class="tool-btn text-[12px] font-semibold px-3 h-9 flex items-center gap-1.5" style="color:var(--text2)">
+        <span>&#128240;</span> News
+      </button>
       <button id="restartBtn" onclick="restartConnection()" title="Restart live feed"
         class="tool-btn w-9 h-9 flex items-center justify-center" style="color:var(--text3)">
         &#8635;
@@ -529,6 +535,24 @@
       <span id="premiumScope" class="text-[10px]" style="color:var(--text3)">scans all F&amp;O stocks</span>
     </div>
     <div id="premiumResults"><div class="text-[11px]" style="color:var(--text3)">Enter a premium to find the nearest option strikes.</div></div>
+  </section>
+
+  <!-- ===== NEWS ===== -->
+  <section id="newsPanel" class="hidden surface-raised rounded-2xl p-4 mb-5 fade-in">
+    <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+      <span class="label">Latest News <span id="newsScope" style="color:var(--text3)"></span></span>
+      <div class="flex items-center gap-2">
+        <button onclick="fetchNews()" title="Refresh" class="tool-btn w-8 h-8 flex items-center justify-center" style="color:var(--text3)">&#8635;</button>
+        <button onclick="toggleNews()" title="Close" class="tool-btn w-8 h-8 flex items-center justify-center" style="color:var(--text3)">&#10005;</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
+      <input id="newsInput" type="text" placeholder="stock symbol (blank = market news)"
+        onkeydown="if(event.key==='Enter')fetchNews()"
+        class="input-dark px-3 py-2 text-sm uppercase" style="width:220px;font-family:var(--font-mono)">
+      <button onclick="fetchNews()" class="btn-primary whitespace-nowrap px-4 py-2">&#128269; Get news</button>
+    </div>
+    <div id="newsResults"><div class="text-[11px]" style="color:var(--text3)">Loading…</div></div>
   </section>
 
   <div id="dimmer"></div>
@@ -912,6 +936,49 @@ function openFromPremium(sym, strike) {
   detailCurSym = null;
   renderDetail();
   toast(`${sym} — strike ${strike}`, 'info');
+}
+
+// ========================= NEWS =========================
+function _esc(s) { return String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function _timeAgo(pub) {
+  const t = Date.parse(pub); if (isNaN(t)) return '';
+  const s = (Date.now() - t) / 1000;
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm ago';
+  if (s < 86400) return Math.round(s / 3600) + 'h ago';
+  return Math.round(s / 86400) + 'd ago';
+}
+function toggleNews() {
+  const p = document.getElementById('newsPanel');
+  const show = p.classList.contains('hidden');
+  p.classList.toggle('hidden', !show);
+  document.getElementById('newsBtn').classList.toggle('active', show);
+  if (show) {
+    const inp = document.getElementById('newsInput');
+    if (!inp.value && selectedSymbol) inp.value = selectedSymbol;   // default to the selected stock
+    fetchNews();
+  }
+}
+async function fetchNews() {
+  const box = document.getElementById('newsResults');
+  const sym = (document.getElementById('newsInput').value || '').trim().toUpperCase();
+  document.getElementById('newsScope').textContent = sym ? `· ${sym}` : '· market';
+  box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">Loading headlines…</div>`;
+  try {
+    const q = sym ? `&symbol=${encodeURIComponent(sym)}` : '';
+    const res = await fetch(`${API_BASE}/api/chain?news=1${q}`, { cache: 'no-store' });
+    const d = await res.json();
+    const items = (d.items || []);
+    if (!items.length) { box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">No headlines found.</div>`; return; }
+    box.innerHTML = `<div style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">` + items.map(it => {
+      const ago = _timeAgo(it.pubDate);
+      return `<a href="${_esc(it.link)}" target="_blank" rel="noopener noreferrer" class="news-item" style="display:block;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);text-decoration:none">
+        <div style="font-family:var(--font-display);font-size:12.5px;font-weight:600;color:var(--text1);line-height:1.35">${_esc(it.title)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">${_esc(it.source)}${ago ? ' · ' + ago : ''}</div>
+      </a>`;
+    }).join('') + `</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="text-[11px]" style="color:var(--red)">Couldn't load news — is the backend running?</div>`;
+  }
 }
 
 // ========================= STATE =========================

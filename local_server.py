@@ -102,11 +102,14 @@ class Handler(SimpleHTTPRequestHandler):
             want_candles = bool(params.get("candles"))
             want_movers = bool(params.get("movers"))
             want_premium = bool(params.get("premium_scan"))
+            want_news = bool(params.get("news"))
             interval = params.get("interval", [None])[0]
             if not interval and params.get("daily"):
                 interval = "day"
             try:
-                if want_premium:
+                if want_news:
+                    payload = backend.get_news(params.get("symbol", [None])[0])
+                elif want_premium:
                     payload = backend.get_premium_scan()
                 elif want_movers:
                     payload = backend.get_movers()

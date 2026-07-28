@@ -27,6 +27,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler
 
 UPSTOX_HOST = "https://api.upstox.com"
@@ -897,6 +898,49 @@ def get_premium_scan():
     return payload
 
 
+# ------------------------------------------------------------------ news
+# Latest headlines via Google News RSS (no API key). Per-symbol or general
+# market news; cached 5 min. Headlines are data only — we just relay them.
+_NEWS_CACHE = {}
+_NEWS_TTL = 300.0
+
+
+def get_news(symbol=None):
+    key = (symbol or "").upper() or "_market"
+    now = time.time()
+    hit = _NEWS_CACHE.get(key)
+    if hit and (now - hit[0]) < _NEWS_TTL:
+        return hit[1]
+
+    if symbol:
+        query = f"{symbol} share price NSE stock"
+    else:
+        query = "Nifty Sensex NSE stock market India"
+    url = "https://news.google.com/rss/search?" + urllib.parse.urlencode(
+        {"q": query, "hl": "en-IN", "gl": "IN", "ceid": "IN:en"})
+
+    items = []
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            root = ET.fromstring(resp.read())
+        for it in root.findall(".//item")[:15]:
+            src_el = it.find("source")
+            items.append({
+                "title": (it.findtext("title") or "").strip(),
+                "link": (it.findtext("link") or "").strip(),
+                "pubDate": (it.findtext("pubDate") or "").strip(),
+                "source": (src_el.text.strip() if src_el is not None and src_el.text else ""),
+            })
+    except Exception:
+        pass
+
+    payload = {"type": "news", "symbol": symbol, "items": items}
+    if items:
+        _NEWS_CACHE[key] = (now, payload)
+    return payload
+
+
 # ------------------------------------------------------------------ handler
 class handler(BaseHTTPRequestHandler):
     """Classic Vercel Python serverless function entrypoint."""
@@ -909,12 +953,15 @@ class handler(BaseHTTPRequestHandler):
         want_candles = bool(params.get("candles"))
         want_movers = bool(params.get("movers"))
         want_premium = bool(params.get("premium_scan"))
+        want_news = bool(params.get("news"))
         interval = params.get("interval", [None])[0]
         if not interval and params.get("daily"):
             interval = "day"   # backwards-compat with ?daily=1
 
         try:
-            if want_premium:
+            if want_news:
+                payload = get_news(params.get("symbol", [None])[0])
+            elif want_premium:
                 payload = get_premium_scan()
             elif want_movers:
                 payload = get_movers()
