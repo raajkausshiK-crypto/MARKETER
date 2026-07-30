@@ -551,7 +551,16 @@
         <div class="prem-pane">
           <div class="flex items-center justify-between mb-2 gap-2">
             <span class="label">Strike graph</span>
-            <span id="premStrikeMeta" class="text-[10px]" style="color:var(--text3);font-family:var(--font-mono)"></span>
+            <div class="flex items-center gap-2">
+              <div id="premStrikeRange" class="flex items-center gap-1" role="tablist" aria-label="Strike graph day range">
+                <button type="button" class="tf-btn"        data-days="5"   onclick="setPremStrikeDays(5)">5D</button>
+                <button type="button" class="tf-btn"        data-days="15"  onclick="setPremStrikeDays(15)">15D</button>
+                <button type="button" class="tf-btn active" data-days="30"  onclick="setPremStrikeDays(30)">30D</button>
+                <button type="button" class="tf-btn"        data-days="90"  onclick="setPremStrikeDays(90)">90D</button>
+                <button type="button" class="tf-btn"        data-days="180" onclick="setPremStrikeDays(180)">180D</button>
+              </div>
+              <span id="premStrikeMeta" class="text-[10px]" style="color:var(--text3);font-family:var(--font-mono)"></span>
+            </div>
           </div>
           <div id="premStrikeChart"><div class="text-[11px] py-12 text-center" style="color:var(--text3)">Pick a result to plot premiums across strikes.</div></div>
         </div>
@@ -983,93 +992,129 @@ function clearPremCharts() {
   document.getElementById('premStrikeChart').innerHTML = `<div class="text-[11px] py-12 text-center" style="color:var(--text3)">Pick a result to plot premiums across strikes.</div>`;
   document.getElementById('premStockChart').innerHTML = `<div class="text-[11px] py-12 text-center" style="color:var(--text3)">Pick a result to plot the underlying.</div>`;
 }
-// Every strike's CE/PE premium for one symbol — from the universe scan if we have
-// one, otherwise from the live chain of a loaded stock.
-function premChainFor(sym) {
-  if (_premiumSnapshot && _premiumSnapshot.length) {
-    return _premiumSnapshot.filter(r => r[0] === sym)
-      .map(([, strike, ce, pe]) => ({ strike: Number(strike), ce: Number(ce) || 0, pe: Number(pe) || 0 }))
-      .sort((a, b) => a.strike - b.strike);
-  }
-  const d = watchlist.get(sym);
-  return ((d && d.rows) || [])
-    .map(r => ({ strike: Number(r.strike), ce: Number(r.call?.ltp) || 0, pe: Number(r.put?.ltp) || 0 }))
-    .sort((a, b) => a.strike - b.strike);
-}
 function renderPremCharts() {
   if (!_premSel) return;
   const { sym, strike, side } = _premSel;
   const sideCol = side === 'CE' ? 'var(--green)' : 'var(--red)';
   document.getElementById('premStrikeMeta').innerHTML =
     `${sym} <span style="color:${sideCol};font-weight:700">${strike} ${side}</span>`;
+  ensureOptionCandles(sym, strike, side, 'day');
   document.getElementById('premStrikeChart').innerHTML = premStrikeSVG(sym, strike, side);
   ensureCandles(sym);
   document.getElementById('premStockChart').innerHTML = premStockSVG(sym);
 }
-// Premium (LTP) plotted across the strike ladder, CE vs PE, windowed around the
-// selected strike so near-the-money values aren't flattened by deep-ITM ones.
+
+// How many trailing daily bars to plot on the strike graph. Whole daily-history
+// payload is cached once; changing this just re-slices client-side (no refetch).
+let _premStrikeDays = 30;
+function setPremStrikeDays(days) {
+  _premStrikeDays = Number(days) || 30;
+  document.querySelectorAll('#premStrikeRange .tf-btn').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.days) === _premStrikeDays);
+  });
+  if (_premSel) {
+    const { sym, strike, side } = _premSel;
+    document.getElementById('premStrikeChart').innerHTML = premStrikeSVG(sym, strike, side);
+  }
+}
+
+// Option-candle cache: `${sym}|${strike}|${side}|${interval||'auto'}` -> { t, candles, interval, fetching }.
+// One entry per (contract, interval) — daily bars are fetched once (~220 days)
+// and re-sliced by _premStrikeDays without a re-fetch.
+const optionCandleCache = new Map();
+const OPT_CANDLE_TTL_MS = 60_000;
+function _optKey(sym, strike, side, interval) { return `${sym}|${strike}|${side}|${interval || 'auto'}`; }
+function ensureOptionCandles(sym, strike, side, interval) {
+  const k = _optKey(sym, strike, side, interval);
+  const e = optionCandleCache.get(k) || {};
+  const now = Date.now();
+  if (e.fetching) return e;
+  const ttl = interval === 'day' ? 600_000 : OPT_CANDLE_TTL_MS;
+  if (e.t && (now - e.t) < ttl) return e;
+  e.fetching = true;
+  optionCandleCache.set(k, e);
+  const iv = interval ? `&interval=${encodeURIComponent(interval)}` : '';
+  const url = `${API_BASE}/api/chain?option_candles=1&symbol=${encodeURIComponent(sym)}&strike=${strike}&side=${side}${iv}`;
+  fetch(url, { cache: 'no-store' })
+    .then(r => r.json())
+    .then(d => {
+      e.fetching = false;
+      if (d && Array.isArray(d.candles)) {
+        e.t = Date.now();
+        e.candles = d.candles;
+        e.interval = d.interval || interval || '1minute';
+      }
+      optionCandleCache.set(k, e);
+      if (_premSel && _premSel.sym === sym && Number(_premSel.strike) === Number(strike) && _premSel.side === side
+          && !document.getElementById('premiumPanel').classList.contains('hidden')) {
+        document.getElementById('premStrikeChart').innerHTML = premStrikeSVG(sym, Number(strike), side);
+      }
+    })
+    .catch(() => { e.fetching = false; optionCandleCache.set(k, e); });
+  return e;
+}
+
+// Daily candlestick of the SELECTED option contract itself (e.g. RELIANCE 1200 CE),
+// sliced to the last _premStrikeDays trading days so the pane matches the stock
+// pane in candle format while letting the user pick how far back to look.
 function premStrikeSVG(sym, strike, side) {
-  const all = premChainFor(sym);
-  if (!all.length) return `<div class="text-[11px] py-12 text-center" style="color:var(--text3)">No strike data for ${sym}. Run Search to scan the F&O universe.</div>`;
-  const si = Math.max(0, all.findIndex(r => r.strike === strike));
-  const WIN = 10;
-  const rows = all.slice(Math.max(0, si - WIN), Math.min(all.length, si + WIN + 1));
-  const selIdx = rows.findIndex(r => r.strike === strike);
-  const n = rows.length;
+  const e = optionCandleCache.get(_optKey(sym, strike, side, 'day'));
+  const raw = e && e.candles;
+  if (!raw || !raw.length) {
+    const msg = e && e.t ? `No daily candles for ${strike} ${side}` : `Loading ${strike} ${side} daily candles…`;
+    return `<div class="text-[11px] py-12 text-center" style="color:var(--text3)">${msg}</div>`;
+  }
+  // raw is chronological daily bars — trim to the requested window.
+  const days = Math.max(2, _premStrikeDays || 30);
+  const candles = raw.slice(-days);
+  const isDaily = true;
+  const n = candles.length;
 
   const W = 420, H = 260, P = { t: 10, r: 46, b: 26, l: 8 };
   const iw = W - P.l - P.r, ih = H - P.t - P.b;
-  const vals = rows.flatMap(r => [r.ce, r.pe]).filter(v => v > 0);
-  const hi = Math.max(...vals, 1), lo = 0;
+  const lo = Math.min(...candles.map(c => c[3])), hi = Math.max(...candles.map(c => c[2]));
   const span = (hi - lo) || 1;
-  const x = i => P.l + (n === 1 ? iw / 2 : (i / (n - 1)) * iw);
   const y = v => P.t + (1 - (v - lo) / span) * ih;
+  const gap = iw / n, cw = Math.max(1, Math.min(5, gap * 0.7));
 
-  const line = (key, col) => {
-    const pts = rows.map((r, i) => (r[key] > 0 ? `${x(i).toFixed(1)},${y(r[key]).toFixed(1)}` : null)).filter(Boolean);
-    if (pts.length < 2) return '';
-    return `<polyline points="${pts.join(' ')}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round"/>`;
-  };
-  const dots = (key, col) => rows.map((r, i) => r[key] > 0
-    ? `<circle cx="${x(i).toFixed(1)}" cy="${y(r[key]).toFixed(1)}" r="1.8" fill="${col}"/>` : '').join('');
+  let sticks = '';
+  for (let i = 0; i < n; i++) {
+    const [, o, h, l, c] = candles[i];
+    const cx = P.l + (i + 0.5) * gap;
+    const col = c >= o ? '#22c55e' : '#ef4444';
+    const top = y(Math.max(o, c)), bh = Math.max(1, y(Math.min(o, c)) - top);
+    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="0.7"/>`;
+    sticks += `<rect x="${(cx - cw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${cw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
+  }
 
-  const target = parseFloat(document.getElementById('premiumInput').value);
-  const tLine = (target >= lo && target <= hi)
-    ? `<line x1="${P.l}" y1="${y(target).toFixed(1)}" x2="${W - P.r}" y2="${y(target).toFixed(1)}" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,4"/>
-       <text x="${W - P.r + 5}" y="${(y(target) + 3.5).toFixed(1)}" fill="#22d3ee" font-size="9.5" font-family="DM Mono, monospace">${fmt(target)}</text>` : '';
+  const lbl = ts => isDaily
+    ? new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const grid = [hi, (hi + lo) / 2, lo];
+  const sideCol = side === 'CE' ? '#22c55e' : '#ef4444';
 
-  const selKey = side === 'CE' ? 'ce' : 'pe';
-  const selCol = side === 'CE' ? '#22c55e' : '#ef4444';
-  const selMark = selIdx >= 0 ? `
-    <line x1="${x(selIdx).toFixed(1)}" y1="${P.t}" x2="${x(selIdx).toFixed(1)}" y2="${(P.t + ih).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.8" stroke-dasharray="3,3"/>
-    <circle cx="${x(selIdx).toFixed(1)}" cy="${y(rows[selIdx][selKey]).toFixed(1)}" r="4" fill="${selCol}" stroke="#0e0e12" stroke-width="1.2"/>` : '';
+  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap, lo, hi, span, W, H, n, isDaily,
+                 hasVol: false, volBase: P.t + ih, tfmt: isDaily ? 'date' : 'time' };
+  const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
-  const grid = [hi, hi / 2, lo];
-  const xl = i => `<text x="${x(i).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="9.5" text-anchor="middle" font-family="DM Mono, monospace">${rows[i].strike}</text>`;
-
-  // Geometry + rows for the strike-graph crosshair (see strikeCrosshair()).
-  const strikeData = encodeURIComponent(JSON.stringify({
-    Pl: P.l, Pr: P.r, Pt: P.t, ih, iw, W, H, lo, hi, span, n,
-    xs: rows.map((_, i) => x(i)),
-    rows: rows.map(r => ({ strike: r.strike, v: r[selKey] })),
-    side, selCol,
-  }));
-
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" data-strike="${strikeData}" style="min-height:200px;cursor:crosshair">
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" style="min-height:200px;cursor:crosshair">
     ${grid.map(v => `<line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1c1c24" stroke-dasharray="3,4"/>
       <text x="${W - P.r + 5}" y="${(y(v) + 3.5).toFixed(1)}" fill="#5c5c6e" font-size="9.5" font-family="DM Mono, monospace">${fmt(v)}</text>`).join('')}
-    ${tLine}
-    ${side === 'CE' ? line('ce', '#22c55e') + dots('ce', '#22c55e')
-                    : line('pe', '#ef4444') + dots('pe', '#ef4444')}
-    ${selMark}
-    ${xl(0)}${n > 2 ? xl(Math.floor((n - 1) / 2)) : ''}${n > 1 ? xl(n - 1) : ''}
-    <text x="${P.l}" y="${P.t + 8}" fill="${selCol}" font-size="9.5" font-family="DM Mono, monospace">${side}</text>
-    <g class="sx-layer" style="display:none;pointer-events:none">
-      <line class="sx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
-      <circle class="sx-dot" r="3.2" fill="#f0f0f5" stroke="${selCol}" stroke-width="1.4"/>
-      <g class="sx-tip">
-        <rect class="sx-bg" width="96" height="34" rx="5" fill="#0e0e12" fill-opacity="0.96" stroke="#26262f" stroke-width="0.8"/>
-        <text class="sx-txt" font-size="10" font-family="DM Mono, monospace" fill="#f0f0f5"></text>
+    ${sticks}
+    <text x="${P.l}" y="${H - 8}" fill="#5c5c6e" font-size="9.5" font-family="DM Mono, monospace">${lbl(candles[0][0])}</text>
+    <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="9.5" text-anchor="end" font-family="DM Mono, monospace">${lbl(candles[n - 1][0])}</text>
+    <text x="${P.l}" y="${P.t + 8}" fill="${sideCol}" font-size="9.5" font-family="DM Mono, monospace">${strike} ${side} · ${n}D daily</text>
+    <g class="cx-layer" style="display:none;pointer-events:none">
+      <line class="cx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
+      <line class="cx-h" x1="${P.l}" x2="${(W - P.r).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
+      <circle class="cx-dot" r="2.6" fill="#f0f0f5"/>
+      <g class="cx-ptag">
+        <rect x="${(W - P.r).toFixed(1)}" width="${(P.r - 2).toFixed(1)}" height="15" y="0" fill="#1c1c24" rx="3"/>
+        <text class="cx-ptext" x="${(W - P.r + 5).toFixed(1)}" y="0" fill="#f0f0f5" font-size="10" font-family="DM Mono, monospace"></text>
+      </g>
+      <g class="cx-tip">
+        <rect class="cx-tipbg" width="112" height="86" rx="6" fill="#0e0e12" fill-opacity="0.95" stroke="#26262f" stroke-width="0.8"/>
+        <text class="cx-tiptext" font-size="9.5" font-family="DM Mono, monospace" fill="#9898a8"></text>
       </g>
     </g>
   </svg>`;
@@ -3290,57 +3335,6 @@ function chartCrosshair(ev) {
 document.addEventListener('mousemove', chartCrosshair);
 document.addEventListener('mouseleave', () => {
   document.querySelectorAll('svg[data-chart] .cx-layer').forEach(l => l.style.display = 'none');
-}, true);
-
-// Strike-graph crosshair (premium finder): vertical guide + strike/premium tag.
-function strikeCrosshair(ev) {
-  const svg = ev.target.closest ? ev.target.closest('svg[data-strike]') : null;
-  document.querySelectorAll('svg[data-strike] .sx-layer').forEach(l => {
-    if (!svg || !svg.contains(l)) l.style.display = 'none';
-  });
-  if (!svg) return;
-  const layer = svg.querySelector('.sx-layer');
-  const ctm = svg.getScreenCTM();
-  if (!layer || !ctm) return;
-  let g;
-  try { g = JSON.parse(decodeURIComponent(svg.getAttribute('data-strike'))); } catch (e) { return; }
-  const p = svg.createSVGPoint();
-  p.x = ev.clientX; p.y = ev.clientY;
-  const loc = p.matrixTransform(ctm.inverse());
-  if (loc.x < g.Pl - 4 || loc.x > g.W - g.Pr + 4 || loc.y < g.Pt - 4 || loc.y > g.Pt + g.ih + 4) {
-    layer.style.display = 'none'; return;
-  }
-  // Snap to nearest strike.
-  let i = 0, best = Infinity;
-  for (let k = 0; k < g.xs.length; k++) {
-    const d = Math.abs(g.xs[k] - loc.x);
-    if (d < best) { best = d; i = k; }
-  }
-  const cx = g.xs[i];
-  const row = g.rows[i];
-  const cy = g.Pt + (1 - (row.v - g.lo) / g.span) * g.ih;
-  layer.style.display = '';
-  const v = layer.querySelector('.sx-v');
-  v.setAttribute('x1', cx.toFixed(1)); v.setAttribute('x2', cx.toFixed(1));
-  const dot = layer.querySelector('.sx-dot');
-  dot.setAttribute('cx', cx.toFixed(1)); dot.setAttribute('cy', cy.toFixed(1));
-  // Tooltip: place to the right of the guide, flip left if clipping.
-  const bw = 96, bh = 34;
-  let bx = cx + 8;
-  if (bx + bw > g.W - g.Pr) bx = cx - 8 - bw;
-  if (bx < g.Pl) bx = g.Pl;
-  const by = Math.max(g.Pt + 2, Math.min(g.Pt + g.ih - bh, cy - bh / 2));
-  const bg = layer.querySelector('.sx-bg');
-  bg.setAttribute('x', bx.toFixed(1)); bg.setAttribute('y', by.toFixed(1));
-  const txt = layer.querySelector('.sx-txt');
-  txt.setAttribute('y', by.toFixed(1));
-  txt.innerHTML =
-    `<tspan x="${(bx + 7).toFixed(1)}" dy="13" fill="#f0f0f5" font-weight="700">${row.strike} ${g.side}</tspan>` +
-    `<tspan x="${(bx + 7).toFixed(1)}" dy="13" fill="${g.selCol}">&#8377;${fmt(row.v)}</tspan>`;
-}
-document.addEventListener('mousemove', strikeCrosshair);
-document.addEventListener('mouseleave', () => {
-  document.querySelectorAll('svg[data-strike] .sx-layer').forEach(l => l.style.display = 'none');
 }, true);
 
 // ========================= SEARCH INPUT =========================

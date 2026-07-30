@@ -499,6 +499,9 @@ def _leg(opt):
     oi = num(md.get("oi"))
     prev_oi = num(md.get("prev_oi"))
     return {
+        # instrument_key is needed so the frontend can request historical candles
+        # for a specific option contract (used by the premium-finder strike chart).
+        "key": opt.get("instrument_key") or "",
         "ltp": num(md.get("ltp")),
         "oi": oi,
         "prev_oi": prev_oi,
@@ -773,6 +776,96 @@ def get_candles_cached(symbol, interval=None):
     return payload
 
 
+# ------------------------------------------------------------------ option candles
+# Historical candles for a specific option contract (e.g. RELIANCE 1200 CE of
+# the nearest expiry). Chain lookup reuses the shared chain cache so hovering
+# through multiple strikes doesn't re-fetch it each time.
+_OPTION_CANDLE_CACHE = {}
+_OPTION_CANDLE_TTL = 60
+
+
+def _fetch_candles_for_key(instrument_key, interval=None):
+    """Mirror of get_candles() but for an arbitrary Upstox instrument key,
+    skipping the symbol resolve. Returns (used_interval, [[ts,o,h,l,c,v], ...])
+    in chronological order."""
+    enc = urllib.parse.quote(instrument_key, safe="")
+    if interval in _INTERVAL_SPAN:
+        used = interval
+        to = datetime.date.today()
+        frm = to - datetime.timedelta(days=_INTERVAL_SPAN[interval])
+        try:
+            data = _get(f"/v2/historical-candle/{enc}/{interval}/{to}/{frm}", {}).get("data", {}) or {}
+            candles = data.get("candles") or []
+        except UpstoxError:
+            candles = []
+    else:
+        used = "1minute"
+        try:
+            data = _get(f"/v2/historical-candle/intraday/{enc}/1minute", {}).get("data", {}) or {}
+            candles = data.get("candles") or []
+        except UpstoxError:
+            candles = []
+        if not candles:
+            to = datetime.date.today()
+            frm = to - datetime.timedelta(days=6)
+            try:
+                data = _get(f"/v2/historical-candle/{enc}/1minute/{to}/{frm}", {}).get("data", {}) or {}
+                hist = data.get("candles") or []
+            except UpstoxError:
+                hist = []
+            if hist:
+                newest_day = str(hist[0][0])[:10]
+                candles = [c for c in hist if str(c[0])[:10] == newest_day]
+            else:
+                used = "day"
+                data = _get(f"/v2/historical-candle/{enc}/day/{to}/{to - datetime.timedelta(days=45)}", {}).get("data", {}) or {}
+                candles = data.get("candles") or []
+    candles = [[c[0], c[1], c[2], c[3], c[4], c[5] if len(c) > 5 else 0] for c in reversed(candles)]
+    return used, candles
+
+
+def get_option_candles(symbol, strike, side, interval=None):
+    chain = get_chain_cached(symbol, None)
+    if chain.get("type") == "error":
+        return chain
+    try:
+        strike_val = float(strike)
+    except (TypeError, ValueError):
+        return {"type": "error", "message": f"bad strike {strike!r}"}
+    side = str(side).upper()
+    key = None
+    for r in chain.get("rows", []):
+        if abs(float(r.get("strike") or 0) - strike_val) < 1e-6:
+            leg = r.get("call") if side == "CE" else r.get("put")
+            key = (leg or {}).get("key") or ""
+            break
+    if not key:
+        return {"type": "option_candles", "symbol": symbol, "strike": strike_val,
+                "side": side, "candles": [],
+                "message": f"no instrument_key for {symbol} {strike_val} {side}"}
+    used, candles = _fetch_candles_for_key(key, interval=interval)
+    return {"type": "option_candles", "symbol": symbol, "strike": strike_val,
+            "side": side, "interval": used, "instrument_key": key,
+            "candles": candles}
+
+
+def get_option_candles_cached(symbol, strike, side, interval=None):
+    now = time.time()
+    try:
+        strike_norm = round(float(strike), 4)
+    except (TypeError, ValueError):
+        strike_norm = strike
+    ck = (symbol, strike_norm, str(side).upper(), interval)
+    hit = _OPTION_CANDLE_CACHE.get(ck)
+    ttl = 600 if interval else _OPTION_CANDLE_TTL
+    if hit and (now - hit[0]) < ttl:
+        return hit[1]
+    payload = get_option_candles(symbol, strike, side, interval=interval)
+    if payload.get("candles"):
+        _OPTION_CANDLE_CACHE[ck] = (now, payload)
+    return payload
+
+
 
 
 # ------------------------------------------------------------------ movers
@@ -953,12 +1046,15 @@ class handler(BaseHTTPRequestHandler):
         symbol = (params.get("symbol", ["NIFTY"])[0] or "NIFTY").upper().strip()
         expiry = params.get("expiry", [None])[0] or None
         want_candles = bool(params.get("candles"))
+        want_option_candles = bool(params.get("option_candles"))
         want_movers = bool(params.get("movers"))
         want_premium = bool(params.get("premium_scan"))
         want_news = bool(params.get("news"))
         interval = params.get("interval", [None])[0]
         if not interval and params.get("daily"):
             interval = "day"   # backwards-compat with ?daily=1
+        strike = params.get("strike", [None])[0]
+        side = params.get("side", [None])[0]
 
         try:
             if want_news:
@@ -967,6 +1063,8 @@ class handler(BaseHTTPRequestHandler):
                 payload = get_premium_scan()
             elif want_movers:
                 payload = get_movers()
+            elif want_option_candles and strike and side:
+                payload = get_option_candles_cached(symbol, strike, side, interval=interval)
             elif want_candles:
                 payload = get_candles_cached(symbol, interval=interval)
             else:
