@@ -499,7 +499,6 @@ def _leg(opt):
     oi = num(md.get("oi"))
     prev_oi = num(md.get("prev_oi"))
     return {
-        "key": opt.get("instrument_key") or "",
         "ltp": num(md.get("ltp")),
         "oi": oi,
         "prev_oi": prev_oi,
@@ -774,75 +773,6 @@ def get_candles_cached(symbol, interval=None):
     return payload
 
 
-_OPTION_CANDLE_CACHE = {}
-_OPTION_CANDLE_TTL = 60  # seconds
-
-
-def _candles_for_key(instrument_key):
-    """1-minute intraday candles for any Upstox instrument_key, with the same
-    'last completed session' fallback that the stock chart uses."""
-    enc = urllib.parse.quote(instrument_key, safe="")
-    used = "1minute"
-    try:
-        data = _get(f"/v2/historical-candle/intraday/{enc}/1minute", {}).get("data", {}) or {}
-        candles = data.get("candles") or []
-    except UpstoxError:
-        candles = []
-    if not candles:
-        to = datetime.date.today()
-        frm = to - datetime.timedelta(days=6)
-        try:
-            data = _get(f"/v2/historical-candle/{enc}/1minute/{to}/{frm}", {}).get("data", {}) or {}
-            hist = data.get("candles") or []
-        except UpstoxError:
-            hist = []
-        if hist:
-            newest_day = str(hist[0][0])[:10]
-            candles = [c for c in hist if str(c[0])[:10] == newest_day]
-    return used, [[c[0], c[1], c[2], c[3], c[4], c[5] if len(c) > 5 else 0]
-                  for c in reversed(candles)]
-
-
-def get_option_candles(symbol, strike, side, expiry=None):
-    """Intraday candles for one option contract (symbol + strike + CE/PE)."""
-    side = (side or "").upper()
-    if side not in ("CE", "PE"):
-        return {"type": "error", "message": "side must be CE or PE"}
-    try:
-        strike_f = float(strike)
-    except (TypeError, ValueError):
-        return {"type": "error", "message": "invalid strike"}
-
-    chain = get_chain_cached(symbol, expiry)
-    row = None
-    if chain.get("rows"):
-        row = min(chain["rows"], key=lambda r: abs((r.get("strike") or 0) - strike_f))
-    if not row or abs((row.get("strike") or 0) - strike_f) > 0.51:
-        return {"type": "option_candles", "symbol": symbol, "strike": strike_f,
-                "side": side, "interval": "1minute", "candles": []}
-
-    leg = row.get("call") if side == "CE" else row.get("put")
-    key = (leg or {}).get("key") or ""
-    if not key:
-        return {"type": "option_candles", "symbol": symbol, "strike": row["strike"],
-                "side": side, "interval": "1minute", "candles": []}
-
-    _, candles = _candles_for_key(key)
-    return {"type": "option_candles", "symbol": symbol, "strike": row["strike"],
-            "side": side, "expiry": chain.get("expiry"),
-            "interval": "1minute", "candles": candles}
-
-
-def get_option_candles_cached(symbol, strike, side, expiry=None):
-    now = time.time()
-    ck = (symbol, float(strike or 0), (side or "").upper(), expiry or "")
-    hit = _OPTION_CANDLE_CACHE.get(ck)
-    if hit and (now - hit[0]) < _OPTION_CANDLE_TTL:
-        return hit[1]
-    payload = get_option_candles(symbol, strike, side, expiry=expiry)
-    if payload.get("candles"):
-        _OPTION_CANDLE_CACHE[ck] = (now, payload)
-    return payload
 
 
 # ------------------------------------------------------------------ movers
@@ -1023,15 +953,12 @@ class handler(BaseHTTPRequestHandler):
         symbol = (params.get("symbol", ["NIFTY"])[0] or "NIFTY").upper().strip()
         expiry = params.get("expiry", [None])[0] or None
         want_candles = bool(params.get("candles"))
-        want_option_candles = bool(params.get("option_candles"))
         want_movers = bool(params.get("movers"))
         want_premium = bool(params.get("premium_scan"))
         want_news = bool(params.get("news"))
         interval = params.get("interval", [None])[0]
         if not interval and params.get("daily"):
             interval = "day"   # backwards-compat with ?daily=1
-        strike = params.get("strike", [None])[0]
-        side = params.get("side", [None])[0]
 
         try:
             if want_news:
@@ -1040,8 +967,6 @@ class handler(BaseHTTPRequestHandler):
                 payload = get_premium_scan()
             elif want_movers:
                 payload = get_movers()
-            elif want_option_candles:
-                payload = get_option_candles_cached(symbol, strike, side, expiry=expiry)
             elif want_candles:
                 payload = get_candles_cached(symbol, interval=interval)
             else:
