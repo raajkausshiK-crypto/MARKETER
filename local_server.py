@@ -113,7 +113,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if want_news:
                     payload = backend.get_news(params.get("symbol", [None])[0])
                 elif want_premium:
-                    payload = backend.get_premium_scan()
+                    payload = backend.get_premium_scan(month=params.get("month", [None])[0])
                 elif want_movers:
                     payload = backend.get_movers()
                 elif want_option_candles and strike and side:

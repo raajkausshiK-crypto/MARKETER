@@ -949,18 +949,34 @@ def get_movers(top=10):
 # universe, so the frontend can find options near any target price. Each stock
 # is one option-chain call (lightweight — no quote/prev-close), run in parallel
 # and cached, because the client filters the same snapshot as the user types.
-_PREMIUM_CACHE = {"t": 0.0, "data": None}
+# One cache slot per month filter (None = nearest expiry per symbol).
+_PREMIUM_CACHE = {}   # {month_or_None: (t, payload)}
 _PREMIUM_TTL = 60.0
 
 
-def _chain_ltps(sym_key):
+def _pick_expiry_for_month(exps, month):
+    """From a chronological list of expiry-dates for one symbol, return the
+    expiry within the requested month. Falls back to the nearest expiry if the
+    symbol has none in that month (e.g. weekly-only tickers).
+    Convention: last expiry of the month wins — that's the monthly one."""
+    if not exps:
+        return None
+    if not month:
+        return exps[0]
+    in_m = [e for e in exps if str(e).startswith(month)]
+    return in_m[-1] if in_m else exps[0]
+
+
+def _chain_ltps(args):
+    sym_key, month = args
     sym, instrument_key = sym_key
     try:
         exps = get_expiries(instrument_key)
-        if not exps:
+        expiry = _pick_expiry_for_month(exps, month)
+        if not expiry:
             return []
         data = _get("/v2/option/chain", {"instrument_key": instrument_key,
-                                         "expiry_date": exps[0]}).get("data", []) or []
+                                         "expiry_date": expiry}).get("data", []) or []
         out = []
         for r in data:
             strike = r.get("strike_price")
@@ -977,19 +993,46 @@ def _chain_ltps(sym_key):
         return []
 
 
-def get_premium_scan():
+def _available_expiry_months():
+    """Union of YYYY-MM months across a handful of canonical F&O symbols, so
+    the frontend can populate its month picker without walking the whole
+    universe. Uses the meta-cache that get_expiries() already populates, so
+    this is O(N) list-scan not O(N) API calls once expiries have been seen."""
+    months = set()
+    canonical = ["NIFTY", "BANKNIFTY", "RELIANCE", "HDFCBANK", "TCS"]
+    for sym in canonical:
+        key = SYMBOL_TO_INSTRUMENT.get(sym)
+        if not key:
+            continue
+        try:
+            for e in get_expiries(key) or []:
+                s = str(e)
+                if len(s) >= 7:
+                    months.add(s[:7])
+        except Exception:
+            continue
+    return sorted(months)
+
+
+def get_premium_scan(month=None):
     now = time.time()
-    if _PREMIUM_CACHE["data"] and (now - _PREMIUM_CACHE["t"]) < _PREMIUM_TTL:
-        return _PREMIUM_CACHE["data"]
+    hit = _PREMIUM_CACHE.get(month)
+    if hit and (now - hit[0]) < _PREMIUM_TTL:
+        return hit[1]
     from concurrent.futures import ThreadPoolExecutor
     rows = []
     with ThreadPoolExecutor(max_workers=10) as ex:
-        for res in ex.map(_chain_ltps, _MOVERS_UNIVERSE):
+        for res in ex.map(_chain_ltps, [(sk, month) for sk in _MOVERS_UNIVERSE]):
             rows.extend(res)
-    payload = {"type": "premium_scan", "rows": rows, "stocks": len({r[0] for r in rows})}
+    payload = {
+        "type": "premium_scan",
+        "rows": rows,
+        "stocks": len({r[0] for r in rows}),
+        "month": month,
+        "months": _available_expiry_months(),
+    }
     if rows:
-        _PREMIUM_CACHE["t"] = now
-        _PREMIUM_CACHE["data"] = payload
+        _PREMIUM_CACHE[month] = (now, payload)
     return payload
 
 
@@ -1060,7 +1103,7 @@ class handler(BaseHTTPRequestHandler):
             if want_news:
                 payload = get_news(params.get("symbol", [None])[0])
             elif want_premium:
-                payload = get_premium_scan()
+                payload = get_premium_scan(month=params.get("month", [None])[0])
             elif want_movers:
                 payload = get_movers()
             elif want_option_candles and strike and side:

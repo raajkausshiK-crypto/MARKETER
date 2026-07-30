@@ -546,6 +546,10 @@
         <button id="premCE" onclick="setPremSide('ce')" class="toggle-btn">CE</button>
         <button id="premPE" onclick="setPremSide('pe')" class="toggle-btn">PE</button>
       </div>
+      <select id="premMonth" onchange="setPremMonth(this.value)" class="input-dark text-sm"
+              style="padding:6px 8px;font-family:var(--font-mono)" title="Expiry month for the scan">
+        <option value="">Auto (nearest)</option>
+      </select>
       <span id="premiumScope" class="text-[10px]" style="color:var(--text3)">scans all F&amp;O stocks</span>
     </div>
     <div class="prem-layout">
@@ -897,6 +901,27 @@ function setPremSide(side) {
 // Snapshot of every F&O strike's CE/PE premium, fetched by the Search button.
 // [ [symbol, strike, ceLtp, peLtp], ... ]
 let _premiumSnapshot = null;
+// Expiry-month filter for the scan (empty string = auto/nearest per symbol).
+let _premMonth = '';
+function setPremMonth(m) {
+  _premMonth = m || '';
+  if (!document.getElementById('premiumPanel').classList.contains('hidden')) scanPremium();
+}
+// Pretty-print YYYY-MM as "Aug 2026".
+function _prettyMonth(ym) {
+  if (!ym || ym.length < 7) return ym || '';
+  const [y, m] = ym.split('-');
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+}
+function _populatePremMonths(months) {
+  const sel = document.getElementById('premMonth');
+  if (!sel || !Array.isArray(months)) return;
+  const current = _premMonth;
+  const options = ['<option value="">Auto (nearest)</option>']
+    .concat(months.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${_prettyMonth(m)}</option>`));
+  sel.innerHTML = options.join('');
+}
 async function scanPremium() {
   const btn = document.getElementById('premiumSearchBtn');
   const box = document.getElementById('premiumResults');
@@ -905,11 +930,16 @@ async function scanPremium() {
   btn.textContent = 'Scanning…'; btn.disabled = true;
   box.innerHTML = `<div class="text-[11px]" style="color:var(--text3)">Scanning all F&O option chains… (first scan takes a few seconds)</div>`;
   try {
-    const res = await fetch(`${API_BASE}/api/chain?premium_scan=1`, { cache: 'no-store' });
+    const qs = _premMonth ? `&month=${encodeURIComponent(_premMonth)}` : '';
+    const res = await fetch(`${API_BASE}/api/chain?premium_scan=1${qs}`, { cache: 'no-store' });
     const d = await res.json();
     if (d.type === 'premium_scan') {
       _premiumSnapshot = d.rows || [];
-      document.getElementById('premiumScope').textContent = `scanned ${d.stocks} F&O stocks`;
+      _populatePremMonths(d.months || []);
+      const scope = d.month
+        ? `scanned ${d.stocks} F&O stocks · ${_prettyMonth(d.month)} expiry`
+        : `scanned ${d.stocks} F&O stocks`;
+      document.getElementById('premiumScope').textContent = scope;
     } else {
       box.innerHTML = `<div class="text-[11px]" style="color:var(--red)">${d.message || 'Scan failed'}</div>`;
     }
