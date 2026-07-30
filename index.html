@@ -555,12 +555,13 @@
           <div class="flex items-center justify-between mb-2 gap-2">
             <span class="label">Strike graph</span>
             <div class="flex items-center gap-2">
-              <div id="premStrikeRange" class="flex items-center gap-1" role="tablist" aria-label="Strike graph day range">
-                <button type="button" class="tf-btn"        data-days="5"   onclick="setPremStrikeDays(5)">5D</button>
-                <button type="button" class="tf-btn"        data-days="15"  onclick="setPremStrikeDays(15)">15D</button>
-                <button type="button" class="tf-btn active" data-days="30"  onclick="setPremStrikeDays(30)">30D</button>
-                <button type="button" class="tf-btn"        data-days="90"  onclick="setPremStrikeDays(90)">90D</button>
-                <button type="button" class="tf-btn"        data-days="180" onclick="setPremStrikeDays(180)">180D</button>
+              <div id="premStrikeRange" class="flex items-center gap-1" role="tablist" aria-label="Strike graph timeframe">
+                <button type="button" class="tf-btn"        data-key="1D" onclick="setPremStrikeRange('1D')">1D</button>
+                <button type="button" class="tf-btn"        data-key="1W" onclick="setPremStrikeRange('1W')">1W</button>
+                <button type="button" class="tf-btn active" data-key="1M" onclick="setPremStrikeRange('1M')">1M</button>
+                <button type="button" class="tf-btn"        data-key="3M" onclick="setPremStrikeRange('3M')">3M</button>
+                <button type="button" class="tf-btn"        data-key="6M" onclick="setPremStrikeRange('6M')">6M</button>
+                <button type="button" class="tf-btn"        data-key="1Y" onclick="setPremStrikeRange('1Y')">1Y</button>
               </div>
               <span id="premStrikeMeta" class="text-[10px]" style="color:var(--text3);font-family:var(--font-mono)"></span>
             </div>
@@ -1001,22 +1002,39 @@ function renderPremCharts() {
   const sideCol = side === 'CE' ? 'var(--green)' : 'var(--red)';
   document.getElementById('premStrikeMeta').innerHTML =
     `${sym} <span style="color:${sideCol};font-weight:700">${strike} ${side}</span>`;
-  ensureOptionCandles(sym, strike, side, 'day');
+  const cur = _premStrikeRange();
+  ensureOptionCandles(sym, strike, side, cur.interval);
   document.getElementById('premStrikeChart').innerHTML = premStrikeSVG(sym, strike, side);
   ensureCandles(sym);
   document.getElementById('premStockChart').innerHTML = premStockSVG(sym);
 }
 
-// How many trailing daily bars to plot on the strike graph. Whole daily-history
-// payload is cached once; changing this just re-slices client-side (no refetch).
-let _premStrikeDays = 30;
-function setPremStrikeDays(days) {
-  _premStrikeDays = Number(days) || 30;
+// Groww-style timeframe presets. Each caches its own candle payload — flipping
+// between presets fetches the new bucket once, then subsequent flips just
+// re-read the cache.
+//   bars: max trailing bars to render (null = whatever the API returned)
+//   agg:  frontend aggregation of 1-min bars (5 => 5-min candles for 1D)
+const PREM_STRIKE_RANGES = [
+  { key: '1D', label: '1D', interval: '1minute',  bars: null, agg: 5 },
+  { key: '1W', label: '1W', interval: '30minute', bars: 88,   agg: 1 },
+  { key: '1M', label: '1M', interval: 'day',      bars: 22,   agg: 1 },
+  { key: '3M', label: '3M', interval: 'day',      bars: 66,   agg: 1 },
+  { key: '6M', label: '6M', interval: 'day',      bars: 132,  agg: 1 },
+  { key: '1Y', label: '1Y', interval: 'day',      bars: 250,  agg: 1 },
+];
+let _premStrikeRangeKey = '1M';
+function _premStrikeRange() {
+  return PREM_STRIKE_RANGES.find(r => r.key === _premStrikeRangeKey) || PREM_STRIKE_RANGES[2];
+}
+function setPremStrikeRange(key) {
+  _premStrikeRangeKey = key;
+  const cur = _premStrikeRange();
   document.querySelectorAll('#premStrikeRange .tf-btn').forEach(b => {
-    b.classList.toggle('active', Number(b.dataset.days) === _premStrikeDays);
+    b.classList.toggle('active', b.dataset.key === cur.key);
   });
   if (_premSel) {
     const { sym, strike, side } = _premSel;
+    ensureOptionCandles(sym, strike, side, cur.interval);
     document.getElementById('premStrikeChart').innerHTML = premStrikeSVG(sym, strike, side);
   }
 }
@@ -1057,28 +1075,29 @@ function ensureOptionCandles(sym, strike, side, interval) {
   return e;
 }
 
-// Daily candlestick of the SELECTED option contract itself (e.g. RELIANCE 1200 CE),
-// sliced to the last _premStrikeDays trading days so the pane matches the stock
-// pane in candle format while letting the user pick how far back to look.
+// Candlestick of the selected option, timeframe controlled by _premStrikeRangeKey.
+// One cache entry per (contract, interval); slicing/aggregation is client-side.
 function premStrikeSVG(sym, strike, side) {
-  const e = optionCandleCache.get(_optKey(sym, strike, side, 'day'));
-  const raw = e && e.candles;
-  if (!raw || !raw.length) {
-    const msg = e && e.t ? `No daily candles for ${strike} ${side}` : `Loading ${strike} ${side} daily candles…`;
+  const cur = _premStrikeRange();
+  const e = optionCandleCache.get(_optKey(sym, strike, side, cur.interval));
+  const rawAll = e && e.candles;
+  if (!rawAll || !rawAll.length) {
+    const msg = e && e.t ? `No ${cur.label} data for ${strike} ${side}` : `Loading ${cur.label} · ${strike} ${side}…`;
     return `<div class="text-[11px] py-12 text-center" style="color:var(--text3)">${msg}</div>`;
   }
-  // raw is chronological daily bars — trim to the requested window.
-  const days = Math.max(2, _premStrikeDays || 30);
-  const candles = raw.slice(-days);
-  const isDaily = true;
+  const agg = cur.agg > 1 ? aggregateCandles(rawAll, cur.agg) : rawAll;
+  const candles = cur.bars ? agg.slice(-cur.bars) : agg;
   const n = candles.length;
+  const isDaily = cur.interval === 'day';
+  const isIntraday1D = cur.interval === '1minute';
 
   const W = 420, H = 260, P = { t: 10, r: 46, b: 26, l: 8 };
   const iw = W - P.l - P.r, ih = H - P.t - P.b;
   const lo = Math.min(...candles.map(c => c[3])), hi = Math.max(...candles.map(c => c[2]));
   const span = (hi - lo) || 1;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
-  const gap = iw / n, cw = Math.max(1, Math.min(5, gap * 0.7));
+  // Fatter bodies: cap at 16px (was 5) so a small day count still reads as candles.
+  const gap = iw / n, cw = Math.max(2, Math.min(16, gap * 0.7));
 
   let sticks = '';
   for (let i = 0; i < n; i++) {
@@ -1086,18 +1105,22 @@ function premStrikeSVG(sym, strike, side) {
     const cx = P.l + (i + 0.5) * gap;
     const col = c >= o ? '#22c55e' : '#ef4444';
     const top = y(Math.max(o, c)), bh = Math.max(1, y(Math.min(o, c)) - top);
-    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="0.7"/>`;
+    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
     sticks += `<rect x="${(cx - cw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${cw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
   }
 
   const lbl = ts => isDaily
     ? new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-    : new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    : isIntraday1D
+      ? new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+        + ' ' + new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
   const grid = [hi, (hi + lo) / 2, lo];
   const sideCol = side === 'CE' ? '#22c55e' : '#ef4444';
 
+  const tfmt = isDaily ? 'date' : (isIntraday1D ? 'time' : 'datetime');
   const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap, lo, hi, span, W, H, n, isDaily,
-                 hasVol: false, volBase: P.t + ih, tfmt: isDaily ? 'date' : 'time' };
+                 hasVol: false, volBase: P.t + ih, tfmt };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
   return `<svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" data-tip-slot="premStrikeMeta" style="min-height:200px;cursor:crosshair">
@@ -1106,7 +1129,7 @@ function premStrikeSVG(sym, strike, side) {
     ${sticks}
     <text x="${P.l}" y="${H - 8}" fill="#5c5c6e" font-size="9.5" font-family="DM Mono, monospace">${lbl(candles[0][0])}</text>
     <text x="${(W - P.r).toFixed(1)}" y="${H - 8}" fill="#5c5c6e" font-size="9.5" text-anchor="end" font-family="DM Mono, monospace">${lbl(candles[n - 1][0])}</text>
-    <text x="${P.l}" y="${P.t + 8}" fill="${sideCol}" font-size="9.5" font-family="DM Mono, monospace">${strike} ${side} · ${n}D daily</text>
+    <text x="${P.l}" y="${P.t + 8}" fill="${sideCol}" font-size="9.5" font-family="DM Mono, monospace">${strike} ${side} · ${cur.label} · ${n} bars</text>
     <g class="cx-layer" style="display:none;pointer-events:none">
       <line class="cx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
       <line class="cx-h" x1="${P.l}" x2="${(W - P.r).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="3,3"/>
@@ -1140,7 +1163,7 @@ function premStockSVG(sym) {
   const lo = Math.min(...candles.map(c => c[3])), hi = Math.max(...candles.map(c => c[2]));
   const span = (hi - lo) || 1;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
-  const gap = iw / n, cw = Math.max(1, Math.min(5, gap * 0.7));
+  const gap = iw / n, cw = Math.max(2, Math.min(12, gap * 0.7));
 
   let sticks = '';
   for (let i = 0; i < n; i++) {
@@ -1148,7 +1171,7 @@ function premStockSVG(sym) {
     const cx = P.l + (i + 0.5) * gap;
     const col = c >= o ? '#22c55e' : '#ef4444';
     const top = y(Math.max(o, c)), bh = Math.max(1, y(Math.min(o, c)) - top);
-    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="0.7"/>`;
+    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
     sticks += `<rect x="${(cx - cw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${cw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
   }
 
