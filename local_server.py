@@ -100,12 +100,15 @@ class Handler(SimpleHTTPRequestHandler):
             symbol = (params.get("symbol", ["NIFTY"])[0] or "NIFTY").upper().strip()
             expiry = params.get("expiry", [None])[0] or None
             want_candles = bool(params.get("candles"))
+            want_option_candles = bool(params.get("option_candles"))
             want_movers = bool(params.get("movers"))
             want_premium = bool(params.get("premium_scan"))
             want_news = bool(params.get("news"))
             interval = params.get("interval", [None])[0]
             if not interval and params.get("daily"):
                 interval = "day"
+            strike = params.get("strike", [None])[0]
+            side = params.get("side", [None])[0]
             try:
                 if want_news:
                     payload = backend.get_news(params.get("symbol", [None])[0])
@@ -113,6 +116,8 @@ class Handler(SimpleHTTPRequestHandler):
                     payload = backend.get_premium_scan()
                 elif want_movers:
                     payload = backend.get_movers()
+                elif want_option_candles and strike and side:
+                    payload = backend.get_option_candles_cached(symbol, strike, side, interval=interval)
                 elif want_candles:
                     payload = backend.get_candles_cached(symbol, interval=interval)
                 else:
