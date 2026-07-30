@@ -1100,7 +1100,7 @@ function premStrikeSVG(sym, strike, side) {
                  hasVol: false, volBase: P.t + ih, tfmt: isDaily ? 'date' : 'time' };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" style="min-height:200px;cursor:crosshair">
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" data-tip-slot="premStrikeMeta" style="min-height:200px;cursor:crosshair">
     ${grid.map(v => `<line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1c1c24" stroke-dasharray="3,4"/>
       <text x="${W - P.r + 5}" y="${(y(v) + 3.5).toFixed(1)}" fill="#5c5c6e" font-size="9.5" font-family="DM Mono, monospace">${fmt(v)}</text>`).join('')}
     ${sticks}
@@ -1167,7 +1167,7 @@ function premStockSVG(sym) {
                  hasVol: false, volBase: P.t + ih, tfmt: isDaily ? 'date' : 'time' };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" style="min-height:200px;cursor:crosshair">
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" data-chart="${chartData}" data-tip-slot="premStockMeta" style="min-height:200px;cursor:crosshair">
     ${grid.map(v => `<line x1="${P.l}" y1="${y(v).toFixed(1)}" x2="${W - P.r}" y2="${y(v).toFixed(1)}" stroke="#1c1c24" stroke-dasharray="3,4"/>
       <text x="${W - P.r + 5}" y="${(y(v) + 3.5).toFixed(1)}" fill="#5c5c6e" font-size="9.5" font-family="DM Mono, monospace">${fmt(v)}</text>`).join('')}
     ${sticks}
@@ -3253,11 +3253,27 @@ function updateAlertStatus() {
 // One delegated handler drives the crosshair on every rendered price chart.
 // Charts embed their geometry + candles in data-chart (see renderStockGraph),
 // so this survives the live re-renders that replace the SVG markup.
+// If an SVG declares data-tip-slot="someId", the OHLC readout writes into that
+// element (a pane header, usually) instead of a floating tooltip. Restore it
+// to whatever it was showing before hover on the way out.
+function _restoreTipSlot(svg) {
+  const id = svg && svg.getAttribute && svg.getAttribute('data-tip-slot');
+  if (!id) return;
+  const slot = document.getElementById(id);
+  if (slot && slot.dataset.premOriginal != null) {
+    slot.innerHTML = slot.dataset.premOriginal;
+    delete slot.dataset.premOriginal;
+  }
+}
+
 function chartCrosshair(ev) {
   const svg = ev.target.closest ? ev.target.closest('svg[data-chart]') : null;
   // Hide the crosshair on any chart the pointer is no longer over.
   document.querySelectorAll('svg[data-chart] .cx-layer').forEach(l => {
-    if (!svg || !svg.contains(l)) l.style.display = 'none';
+    if (!svg || !svg.contains(l)) {
+      l.style.display = 'none';
+      _restoreTipSlot(l.closest('svg[data-chart]'));
+    }
   });
   if (!svg) return;
   const layer = svg.querySelector('.cx-layer');
@@ -3322,22 +3338,42 @@ function chartCrosshair(ev) {
   ];
   if (g.hasVol) rows.push(['Vol  ' + vfmt(cand[5] || 0), '#9898a8']);
 
-  const bw = 112, bh = 12 + rows.length * 12;
-  let bx = cx + 10;
-  if (bx + bw > plotR) bx = cx - 10 - bw;
-  if (bx < plotL) bx = plotL;
-  const by = plotT + 4;
-  const bg = layer.querySelector('.cx-tipbg');
-  bg.setAttribute('x', bx.toFixed(1)); bg.setAttribute('y', by.toFixed(1)); bg.setAttribute('height', bh);
-  const txt = layer.querySelector('.cx-tiptext');
-  txt.setAttribute('y', by.toFixed(1));
-  txt.innerHTML = rows.map((r, idx) =>
-    `<tspan x="${(bx + 7).toFixed(1)}" dy="${idx === 0 ? 15 : 12}" fill="${r[1]}"${r[2] ? ` font-weight="${r[2]}"` : ''}>${r[0]}</tspan>`
-  ).join('');
+  const slotId = svg.getAttribute('data-tip-slot');
+  const slot = slotId ? document.getElementById(slotId) : null;
+  if (slot) {
+    // Pin the OHLC readout into the pane's header instead of drawing a floating
+    // tooltip over the candles. Stash the pre-hover HTML so we can put it back.
+    if (slot.dataset.premOriginal == null) slot.dataset.premOriginal = slot.innerHTML;
+    slot.innerHTML =
+      `<span style="color:#f0f0f5;font-weight:700">${dt}</span>` +
+      ` <span style="color:#5c5c6e">O</span> ${fmt(cand[1])}` +
+      ` <span style="color:#5c5c6e">H</span> ${fmt(cand[2])}` +
+      ` <span style="color:#5c5c6e">L</span> ${fmt(cand[3])}` +
+      ` <span style="color:${col};font-weight:700">C ${fmt(cand[4])} ${(up ? '+' : '')}${chg.toFixed(2)}%</span>`;
+    // Collapse the SVG floating tip so it doesn't sit over the candles.
+    layer.querySelector('.cx-tipbg').setAttribute('height', 0);
+    layer.querySelector('.cx-tiptext').innerHTML = '';
+  } else {
+    const bw = 112, bh = 12 + rows.length * 12;
+    let bx = cx + 10;
+    if (bx + bw > plotR) bx = cx - 10 - bw;
+    if (bx < plotL) bx = plotL;
+    const by = plotT + 4;
+    const bg = layer.querySelector('.cx-tipbg');
+    bg.setAttribute('x', bx.toFixed(1)); bg.setAttribute('y', by.toFixed(1)); bg.setAttribute('height', bh);
+    const txt = layer.querySelector('.cx-tiptext');
+    txt.setAttribute('y', by.toFixed(1));
+    txt.innerHTML = rows.map((r, idx) =>
+      `<tspan x="${(bx + 7).toFixed(1)}" dy="${idx === 0 ? 15 : 12}" fill="${r[1]}"${r[2] ? ` font-weight="${r[2]}"` : ''}>${r[0]}</tspan>`
+    ).join('');
+  }
 }
 document.addEventListener('mousemove', chartCrosshair);
 document.addEventListener('mouseleave', () => {
-  document.querySelectorAll('svg[data-chart] .cx-layer').forEach(l => l.style.display = 'none');
+  document.querySelectorAll('svg[data-chart] .cx-layer').forEach(l => {
+    l.style.display = 'none';
+    _restoreTipSlot(l.closest('svg[data-chart]'));
+  });
 }, true);
 
 // ========================= SEARCH INPUT =========================
