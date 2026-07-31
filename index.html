@@ -178,10 +178,41 @@
     .stock-card .card-back {
       position: absolute; inset: 0;
       transform: rotateY(180deg);
-      display: flex; flex-direction: column; gap: 6px;
+      display: flex; flex-direction: column; gap: 8px;
     }
     .stock-card .card-back .cb-chart { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; }
     .stock-card .card-back .cb-chart svg { width: 100%; height: 100%; }
+    /* Modern header on the back face: LTP + pill-styled change badge + live dot. */
+    .stock-card .cb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .stock-card .cb-title { display: flex; align-items: center; gap: 6px; }
+    .stock-card .cb-live {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.6);
+      animation: cbPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes cbPulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%     { opacity: .5; transform: scale(1.25); }
+    }
+    .stock-card .cb-price {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text1);
+      letter-spacing: -.02em;
+      line-height: 1;
+    }
+    .stock-card .cb-chip {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 7px;
+      border-radius: 999px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .stock-card .cb-chip.up   { background: rgba(34,197,94,.14);  color: #22c55e; border: 1px solid rgba(34,197,94,.25); }
+    .stock-card .cb-chip.down { background: rgba(239,68,68,.14);  color: #ef4444; border: 1px solid rgba(239,68,68,.25); }
     /* Corner controls sit above the flipping inner. */
     .stock-card > .card-btn { position: absolute; z-index: 3; }
     .stock-card .flip-btn { top: 8px; right: 34px; }
@@ -1959,9 +1990,12 @@ function renderCards() {
             `<div data-role="body"></div>` +
           `</div>` +
           `<div class="card-face card-back">` +
-            `<div class="flex items-center justify-between" style="font-family:var(--font-display)">` +
-              `<span class="text-sm font-bold tracking-tight" style="color:var(--text1)">${sym}</span>` +
-              `<span id="cbMeta-${sym}" data-role="cbMeta" class="text-[10px]" style="color:var(--text3);font-family:var(--font-mono);white-space:nowrap"></span>` +
+            `<div class="cb-head">` +
+              `<div class="cb-title">` +
+                `<span class="cb-live" title="Live"></span>` +
+                `<span class="text-sm font-bold tracking-tight" style="font-family:var(--font-display);color:var(--text1)">${sym}</span>` +
+              `</div>` +
+              `<span id="cbMeta-${sym}" data-role="cbMeta"></span>` +
             `</div>` +
             `<div data-role="cbChart" class="cb-chart"></div>` +
           `</div>` +
@@ -2050,14 +2084,33 @@ function renderCardChart(el, sym) {
   }
   const candles = raw;
   const n = candles.length;
-  // Leave room on the right for price labels and on the bottom for time labels.
-  const W = 280, H = 140, P = { t: 6, r: 32, b: 14, l: 4 };
+  // Widen the right axis so 5-digit prices (e.g. "2,024.10") don't get clipped.
+  const W = 280, H = 140, P = { t: 6, r: 44, b: 14, l: 4 };
   const iw = W - P.l - P.r, ih = H - P.t - P.b;
   const lo = Math.min(...candles.map(c => c[3]));
   const hi = Math.max(...candles.map(c => c[2]));
   const span = (hi - lo) || 1;
   const y = v => P.t + (1 - (v - lo) / span) * ih;
   const gap = iw / n, cw = Math.max(0.6, Math.min(3, gap * 0.7));
+
+  // Trend color + gradient key per card (up = green, down = red).
+  const first = candles[0][1], last = candles[n - 1][4];
+  const up = last >= first;
+  const trendCol = up ? '#22c55e' : '#ef4444';
+  const gradId = `cbGrad-${sym}`;
+
+  // Close-line + area fill (behind the candles) so the trend reads at a glance.
+  const linePts = candles.map((c, i) => `${(P.l + (i + 0.5) * gap).toFixed(1)},${y(c[4]).toFixed(1)}`).join(' ');
+  const areaPts = `${(P.l + 0.5 * gap).toFixed(1)},${(P.t + ih).toFixed(1)} ${linePts} ${(P.l + (n - 0.5) * gap).toFixed(1)},${(P.t + ih).toFixed(1)}`;
+  const areaSVG =
+    `<defs>` +
+      `<linearGradient id="${gradId}" x1="0" x2="0" y1="0" y2="1">` +
+        `<stop offset="0%"   stop-color="${trendCol}" stop-opacity="0.28"/>` +
+        `<stop offset="100%" stop-color="${trendCol}" stop-opacity="0"/>` +
+      `</linearGradient>` +
+    `</defs>` +
+    `<polygon points="${areaPts}" fill="url(#${gradId})"/>` +
+    `<polyline points="${linePts}" fill="none" stroke="${trendCol}" stroke-width="0.7" stroke-opacity="0.55"/>`;
 
   let sticks = '';
   for (let i = 0; i < n; i++) {
@@ -2082,7 +2135,13 @@ function renderCardChart(el, sym) {
     `<text x="${P.l}" y="${(H - 4).toFixed(1)}" fill="#5c5c6e" font-size="8" font-family="DM Mono, monospace">${tfmt(candles[0][0])}</text>` +
     `<text x="${(W - P.r).toFixed(1)}" y="${(H - 4).toFixed(1)}" fill="#5c5c6e" font-size="8" text-anchor="end" font-family="DM Mono, monospace">${tfmt(candles[n - 1][0])}</text>`;
 
-  // Geometry for the shared chartCrosshair handler.
+  // Highlight the last close with a small dot on the axis.
+  const lastX = P.l + (n - 0.5) * gap;
+  const lastY = y(last);
+  const lastDot =
+    `<circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.2" fill="${trendCol}"/>` +
+    `<circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4.5" fill="${trendCol}" opacity="0.18"/>`;
+
   const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap, lo, hi, span, W, H, n, isDaily: false,
                  hasVol: false, volBase: P.t + ih, tfmt: 'time' };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
@@ -2092,15 +2151,17 @@ function renderCardChart(el, sym) {
     ` data-chart="${chartData}" data-tip-slot="cbMeta-${sym}"` +
     ` style="cursor:crosshair" xmlns="http://www.w3.org/2000/svg">` +
       gridSVG +
+      areaSVG +
       sticks +
+      lastDot +
       timeSVG +
       `<g class="cx-layer" style="display:none;pointer-events:none">` +
         `<line class="cx-v" y1="${P.t}" y2="${(P.t + ih).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="2,3"/>` +
         `<line class="cx-h" x1="${P.l}" x2="${(W - P.r).toFixed(1)}" stroke="#5c5c6e" stroke-width="0.5" stroke-dasharray="2,3"/>` +
         `<circle class="cx-dot" r="2" fill="#f0f0f5"/>` +
         `<g class="cx-ptag">` +
-          `<rect x="${(W - P.r).toFixed(1)}" width="${(P.r - 2).toFixed(1)}" height="12" y="0" fill="#1c1c24" rx="2"/>` +
-          `<text class="cx-ptext" x="${(W - P.r + 3).toFixed(1)}" y="0" fill="#f0f0f5" font-size="8" font-family="DM Mono, monospace"></text>` +
+          `<rect x="${(W - P.r).toFixed(1)}" width="${(P.r - 2).toFixed(1)}" height="12" y="0" fill="${trendCol}" rx="2"/>` +
+          `<text class="cx-ptext" x="${(W - P.r + 3).toFixed(1)}" y="0" fill="#0e0e12" font-size="8" font-weight="700" font-family="DM Mono, monospace"></text>` +
         `</g>` +
         `<g class="cx-tip">` +
           `<rect class="cx-tipbg" width="0" height="0" rx="4" fill="#0e0e12" fill-opacity="0.95" stroke="#26262f" stroke-width="0.6"/>` +
@@ -2110,9 +2171,12 @@ function renderCardChart(el, sym) {
     `</svg>`;
 
   if (metaEl) {
-    const first = candles[0][1], last = candles[n - 1][4];
     const pct = ((last - first) / (first || 1)) * 100;
-    metaEl.innerHTML = `${fmt(last)} <span style="color:${pct >= 0 ? 'var(--green)' : 'var(--red)'}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</span>`;
+    const chipCls = pct >= 0 ? 'up' : 'down';
+    const chipSign = pct >= 0 ? '+' : '';
+    metaEl.innerHTML =
+      `<span class="cb-price">${fmt(last)}</span>` +
+      ` <span class="cb-chip ${chipCls}">${chipSign}${pct.toFixed(2)}%</span>`;
   }
 }
 
