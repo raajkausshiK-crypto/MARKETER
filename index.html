@@ -213,6 +213,50 @@
     }
     .stock-card .cb-chip.up   { background: rgba(34,197,94,.14);  color: #22c55e; border: 1px solid rgba(34,197,94,.25); }
     .stock-card .cb-chip.down { background: rgba(239,68,68,.14);  color: #ef4444; border: 1px solid rgba(239,68,68,.25); }
+
+    /* Front-face modern layout. Same visual language as the back. */
+    .stock-card .cf-topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .stock-card .cf-seg {
+      font-family: var(--font-mono);
+      font-size: 9px; font-weight: 700; letter-spacing: .12em;
+      padding: 2px 6px; border-radius: 4px; line-height: 1;
+      background: rgba(148,148,168,.08); color: var(--text3);
+      border: 1px solid rgba(148,148,168,.14);
+    }
+    .stock-card .cf-title { display: flex; align-items: center; gap: 6px; }
+    .stock-card .cf-name  { font-family: var(--font-display); font-size: 15px; font-weight: 800; letter-spacing: -.01em; color: var(--text1); }
+    .stock-card .cf-price-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 4px; }
+    .stock-card .cf-price {
+      font-family: var(--font-mono);
+      font-size: 24px; font-weight: 700; letter-spacing: -.03em; line-height: 1.05;
+    }
+    .stock-card .cf-price.up   { color: var(--green); }
+    .stock-card .cf-price.down { color: var(--red); }
+    /* C/P/Vol chip strip */
+    .stock-card .cf-stats { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .stock-card .cf-stat {
+      display: inline-flex; align-items: baseline; gap: 4px;
+      padding: 3px 7px; border-radius: 6px;
+      background: rgba(255,255,255,.02);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 10px; line-height: 1;
+    }
+    .stock-card .cf-stat .k { color: var(--text3); font-size: 9px; font-weight: 700; letter-spacing: .06em; }
+    .stock-card .cf-stat .v { color: var(--text1); font-weight: 700; }
+    .stock-card .cf-stat.c .k { color: var(--green); }
+    .stock-card .cf-stat.p .k { color: var(--red); }
+    .stock-card .cf-stat.v .k { color: var(--cyan); }
+    /* O H L PC 2x2 */
+    .stock-card .cf-ohlc {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px;
+      margin-top: 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .stock-card .cf-ohlc > span { display: flex; justify-content: space-between; align-items: baseline; }
+    .stock-card .cf-ohlc .k { color: var(--text3); font-size: 10px; letter-spacing: .06em; margin-right: 6px; }
+    .stock-card .cf-ohlc .v { font-weight: 700; letter-spacing: -.01em; }
     /* Corner controls sit above the flipping inner. */
     .stock-card > .card-btn { position: absolute; z-index: 3; }
     .stock-card .flip-btn { top: 8px; right: 34px; }
@@ -1985,8 +2029,11 @@ function renderCards() {
           ` style="color:var(--text3)">&#10005;</button>` +
         `<div class="card-inner">` +
           `<div class="card-face card-front">` +
-            `<div data-role="seg" class="label" style="font-size:9px">F&amp;O</div>` +
-            `<div class="text-sm font-bold mt-0.5 tracking-tight" style="font-family:var(--font-display);color:var(--text1)">${sym}</div>` +
+            `<div class="cf-topbar">` +
+              `<span data-role="seg" class="cf-seg">F&amp;O</span>` +
+              `<span class="cb-live" title="Live"></span>` +
+            `</div>` +
+            `<div class="cf-title"><span class="cf-name">${sym}</span></div>` +
             `<div data-role="body"></div>` +
           `</div>` +
           `<div class="card-face card-back">` +
@@ -2043,20 +2090,25 @@ function updateCard(el, sym, d) {
   const maxCallOI = d.rows.length ? Math.max(...d.rows.map(r => r.call?.oi || 0)) : 0;
   const maxPutOI  = d.rows.length ? Math.max(...d.rows.map(r => r.put?.oi || 0)) : 0;
 
+  const chipCls = up ? 'up' : 'down';
+  const chipSign = up ? '+' : '';
   body.innerHTML =
-    `<div class="price-big mt-1.5 ${up?'price-green':'price-red'}">${fmt(d.spot)}</div>` +
-    `<div class="text-[10px] tabular-nums font-semibold mt-0.5" style="font-family:var(--font-mono);color:${up?'var(--green)':'var(--red)'}" title="P&amp;L vs previous close">${up?'+':''}${fmt(change)} (${up?'+':''}${changePct.toFixed(2)}%) vs prev</div>` +
-    `<div class="flex gap-3 mt-2" style="font-family:var(--font-display);font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--text1)">` +
-      `<span title="Max Call OI" style="color:var(--green)">C: ${fmtOI(maxCallOI)}</span>` +
-      `<span title="Max Put OI" style="color:var(--red)">P: ${fmtOI(maxPutOI)}</span>` +
-      `<span title="Volume" style="color:var(--cyan)">Vol: ${fmtOI(d.dayVolume || 0)}</span>` +
-      (priceAlerts[sym] ? `<span style="color:var(--amber)" title="Alert active">&#128276;</span>` : '') +
+    `<div class="cf-price-row">` +
+      `<span class="cf-price ${chipCls}">${fmt(d.spot)}</span>` +
+      `<span class="cb-chip ${chipCls}" title="P&amp;L vs previous close">${chipSign}${changePct.toFixed(2)}%</span>` +
     `</div>` +
-    `<div class="flex flex-col gap-1 mt-2" style="font-family:var(--font-mono);font-size:15px;font-weight:800;letter-spacing:.01em;color:var(--text3)">` +
-      `<span>O: <b style="color:var(--text2)">${fmt(d.dayOpen||0)}</b></span>` +
-      `<span>H: <b style="color:var(--green)">${fmt(d.dayHigh||0)}</b></span>` +
-      `<span>L: <b style="color:var(--red)">${fmt(d.dayLow||0)}</b></span>` +
-      `<span title="Previous day close">PC: <b style="color:var(--amber)">${fmt(prevClose)}</b></span>` +
+    `<div class="text-[10px] tabular-nums font-semibold mt-1" style="font-family:var(--font-mono);color:${up?'var(--green)':'var(--red)'}" title="Absolute change vs previous close">${chipSign}${fmt(change)} vs prev</div>` +
+    `<div class="cf-stats">` +
+      `<span class="cf-stat c" title="Max Call OI"><span class="k">C</span><span class="v">${fmtOI(maxCallOI)}</span></span>` +
+      `<span class="cf-stat p" title="Max Put OI"><span class="k">P</span><span class="v">${fmtOI(maxPutOI)}</span></span>` +
+      `<span class="cf-stat v" title="Volume"><span class="k">VOL</span><span class="v">${fmtOI(d.dayVolume || 0)}</span></span>` +
+      (priceAlerts[sym] ? `<span class="cf-stat" style="color:var(--amber)" title="Alert active">&#128276;</span>` : '') +
+    `</div>` +
+    `<div class="cf-ohlc">` +
+      `<span><span class="k">O</span><span class="v" style="color:var(--text2)">${fmt(d.dayOpen||0)}</span></span>` +
+      `<span><span class="k">H</span><span class="v" style="color:var(--green)">${fmt(d.dayHigh||0)}</span></span>` +
+      `<span><span class="k">L</span><span class="v" style="color:var(--red)">${fmt(d.dayLow||0)}</span></span>` +
+      `<span title="Previous day close"><span class="k">PC</span><span class="v" style="color:var(--amber)">${fmt(prevClose)}</span></span>` +
     `</div>`;
 }
 
