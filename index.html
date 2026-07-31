@@ -2005,7 +2005,10 @@ function renderCards() {
       container.appendChild(el);
     }
     updateCard(el, sym, d);
-    if (el.classList.contains('flipped')) renderCardChart(el, sym);
+    // NB: no renderCardChart here — the flipped-card SVG is repainted only by
+    // toggleCardFlip (on flip) and by ensureCandles' fetch callback (on fresh
+    // data). Repainting on every live tick would tear down the SVG the user is
+    // hovering, which is what caused the crosshair flicker.
   });
 
   updateViewToolbar();
