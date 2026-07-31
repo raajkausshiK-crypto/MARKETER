@@ -165,7 +165,27 @@
       overflow: hidden;
       cursor: pointer;
       transition: all .2s ease;
+      perspective: 1000px;
     }
+    /* 3D flip: front + back share the padded area; only the inner rotates. */
+    .stock-card .card-inner {
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform .55s cubic-bezier(.4,.2,.2,1);
+    }
+    .stock-card.flipped .card-inner { transform: rotateY(180deg); }
+    .stock-card .card-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    .stock-card .card-back {
+      position: absolute; inset: 0;
+      transform: rotateY(180deg);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .stock-card .card-back .cb-chart { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; }
+    .stock-card .card-back .cb-chart svg { width: 100%; height: 100%; }
+    /* Corner controls sit above the flipping inner. */
+    .stock-card > .card-btn { position: absolute; z-index: 3; }
+    .stock-card .flip-btn { top: 8px; right: 34px; }
+    .stock-card .close-btn { top: 8px; right: 8px; }
     .stock-card::after {
       content: '';
       position: absolute; top: 0; left: 12px; right: 12px; height: 2px;
@@ -1926,14 +1946,32 @@ function renderCards() {
       el.className = 'stock-card fade-in';
       el.onclick = () => selectSymbol(sym);
       el.innerHTML =
-        `<button class="absolute top-2 right-2 text-[10px] transition w-5 h-5 flex items-center justify-center rounded-md hover:bg-red-500/10" style="color:var(--text3)" title="Remove">&#10005;</button>` +
-        `<div data-role="seg" class="label" style="font-size:9px">F&amp;O</div>` +
-        `<div class="text-sm font-bold mt-0.5 tracking-tight" style="font-family:var(--font-display);color:var(--text1)">${sym}</div>` +
-        `<div data-role="body"></div>`;
-      el.querySelector('button').onclick = (e) => removeWatchlistItem(sym, e);
+        `<button data-role="flip" title="Flip to today's chart"` +
+          ` class="card-btn flip-btn text-[10px] transition w-5 h-5 flex items-center justify-center rounded-md hover:bg-white/5"` +
+          ` style="color:var(--text3)">&#8635;</button>` +
+        `<button data-role="close" title="Remove"` +
+          ` class="card-btn close-btn text-[10px] transition w-5 h-5 flex items-center justify-center rounded-md hover:bg-red-500/10"` +
+          ` style="color:var(--text3)">&#10005;</button>` +
+        `<div class="card-inner">` +
+          `<div class="card-face card-front">` +
+            `<div data-role="seg" class="label" style="font-size:9px">F&amp;O</div>` +
+            `<div class="text-sm font-bold mt-0.5 tracking-tight" style="font-family:var(--font-display);color:var(--text1)">${sym}</div>` +
+            `<div data-role="body"></div>` +
+          `</div>` +
+          `<div class="card-face card-back">` +
+            `<div class="flex items-center justify-between" style="font-family:var(--font-display)">` +
+              `<span class="text-sm font-bold tracking-tight" style="color:var(--text1)">${sym}</span>` +
+              `<span data-role="cbMeta" class="text-[10px]" style="color:var(--text3);font-family:var(--font-mono)"></span>` +
+            `</div>` +
+            `<div data-role="cbChart" class="cb-chart"></div>` +
+          `</div>` +
+        `</div>`;
+      el.querySelector('[data-role="close"]').onclick = (e) => removeWatchlistItem(sym, e);
+      el.querySelector('[data-role="flip"]').onclick = (e) => toggleCardFlip(sym, e);
       container.appendChild(el);
     }
     updateCard(el, sym, d);
+    if (el.classList.contains('flipped')) renderCardChart(el, sym);
   });
 
   updateViewToolbar();
@@ -1983,6 +2021,58 @@ function updateCard(el, sym, d) {
       `<span>L: <b style="color:var(--red)">${fmt(d.dayLow||0)}</b></span>` +
       `<span title="Previous day close">PC: <b style="color:var(--amber)">${fmt(prevClose)}</b></span>` +
     `</div>`;
+}
+
+// Flip a watchlist card over to reveal today's intraday chart on the back.
+function toggleCardFlip(sym, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  const el = document.querySelector(`#watchlistCards [data-sym="${sym}"]`);
+  if (!el) return;
+  const willFlip = !el.classList.contains('flipped');
+  el.classList.toggle('flipped', willFlip);
+  if (willFlip) {
+    ensureCandles(sym);           // fetches if we don't have it yet; callback re-renders
+    renderCardChart(el, sym);     // paint from cache immediately (Loading… if empty)
+  }
+}
+
+// Compact candlestick of today's action, painted into a flipped card's back.
+function renderCardChart(el, sym) {
+  const chartEl = el.querySelector('[data-role="cbChart"]');
+  const metaEl  = el.querySelector('[data-role="cbMeta"]');
+  if (!chartEl) return;
+  const e = candleCache.get(sym);
+  const raw = e && e.candles;
+  if (!raw || !raw.length) {
+    chartEl.innerHTML = `<div class="text-[10px] w-full text-center self-center" style="color:var(--text3)">${e && e.t ? 'No chart data' : 'Loading…'}</div>`;
+    if (metaEl) metaEl.textContent = '';
+    return;
+  }
+  const candles = raw;   // raw 1-min bars, Zerodha-style density
+  const n = candles.length;
+  const W = 260, H = 120, P = { t: 4, r: 4, b: 4, l: 4 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const lo = Math.min(...candles.map(c => c[3]));
+  const hi = Math.max(...candles.map(c => c[2]));
+  const span = (hi - lo) || 1;
+  const y = v => P.t + (1 - (v - lo) / span) * ih;
+  const gap = iw / n, cw = Math.max(0.6, Math.min(3, gap * 0.7));
+  let sticks = '';
+  for (let i = 0; i < n; i++) {
+    const [, o, h, l, c] = candles[i];
+    const cx = P.l + (i + 0.5) * gap;
+    const col = c >= o ? '#22c55e' : '#ef4444';
+    const top = y(Math.max(o, c)), bh = Math.max(0.6, y(Math.min(o, c)) - top);
+    sticks += `<line x1="${cx.toFixed(1)}" y1="${y(h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(l).toFixed(1)}" stroke="${col}" stroke-width="0.5"/>`;
+    sticks += `<rect x="${(cx - cw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${cw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
+  }
+  chartEl.innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">${sticks}</svg>`;
+  if (metaEl) {
+    const first = candles[0][1], last = candles[n - 1][4];
+    const pct = ((last - first) / (first || 1)) * 100;
+    metaEl.innerHTML = `${fmt(last)} <span style="color:${pct >= 0 ? 'var(--green)' : 'var(--red)'}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</span>`;
+  }
 }
 
 // ========================= VIEW MODE (Single / Quad / Screener) =========================
@@ -2723,6 +2813,9 @@ function ensureCandles(sym) {
       if (_fsSym === sym && document.getElementById('fsOverlay').classList.contains('open')) renderFsChart();
       if (_premSel && _premSel.sym === sym && !document.getElementById('premiumPanel').classList.contains('hidden'))
         document.getElementById('premStockChart').innerHTML = premStockSVG(sym);
+      // Refresh any flipped watchlist card showing this symbol.
+      const flipped = document.querySelector(`#watchlistCards [data-sym="${sym}"].flipped`);
+      if (flipped) renderCardChart(flipped, sym);
     })
     .catch(() => { e.fetching = false; candleCache.set(sym, e); });
 }
