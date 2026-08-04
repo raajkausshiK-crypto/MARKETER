@@ -3261,6 +3261,9 @@ function resetCustomStrikes() {
 
 // ========================= STOCK CATEGORIES =========================
 const CATEGORIES = {
+  // 'All' is a synthetic category — its list is filled below with the deduped
+  // union of every real category so it stays in sync as categories evolve.
+  'All':            [],
   'Indices':        ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','NIFTYNXT50','SENSEX'],
   'Banking':        ['HDFCBANK','ICICIBANK','SBIN','AXISBANK','KOTAKBANK','BANKBARODA','PNB','INDUSINDBK','FEDERALBNK','IDFCFIRSTB','BANDHANBNK','AUBANK','CANBK','UNIONBANK','INDIANB','BAJFINANCE','BAJAJFINSV','HDFCLIFE','SBILIFE','ICICIPRULI','MUTHOOTFIN','MANAPPURAM','CHOLAFIN','M&MFIN','LICHSGFIN','RECLTD','PFC','SHRIRAMFIN'],
   'IT & Tech':      ['TCS','INFY','WIPRO','HCLTECH','TECHM','LTIM','MPHASIS','COFORGE','PERSISTENT','LTTS','CYIENT','TATAELXSI','ZOMATO','PAYTM','NAUKRI','POLICYBZR','ROUTE','BIRLASOFT','OFSS','SONATASOFT','INTELLECT','TANLA','MASTEK','ZENSAR','HAPPSTMNDS'],
@@ -3272,6 +3275,10 @@ const CATEGORIES = {
   'Infra':          ['LT','ULTRACEMCO','SHREECEM','AMBUJACEM','ACC','DALBHARAT','RAMCOCEM','JKCEMENT','IRCON','NBCC','NCC','BEL','HAL','GRASIM','SIEMENS','ABB','CUMMINSIND','THERMAX','HAVELLS','VOLTAS','BLUESTARLT','CROMPTON','DIXON','KAYNES','AFFLE'],
   'Telecom':        ['BHARTIARTL','IDEA','TATACOMM','HATHWAY','NAZARA','NETWEB'],
 };
+// Fill the synthetic 'All' with the deduped union of every real category.
+CATEGORIES['All'] = [...new Set(
+  Object.entries(CATEGORIES).filter(([k]) => k !== 'All').flatMap(([, v]) => v)
+)];
 let activeCat = 'Indices';
 
 // ---- Saved watchlist (personal favorites, persisted) ----
