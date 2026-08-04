@@ -1280,7 +1280,11 @@ function premStockSVG(sym) {
   const meta = document.getElementById('premStockMeta');
   if (!raw || !raw.length) {
     if (meta) meta.textContent = '';
-    return `<div class="text-[11px] py-12 text-center" style="color:var(--text3)">${e && e.t ? 'No chart data available' : 'Loading price chart…'}</div>`;
+    return `<div class="text-[11px] py-12 text-center" style="color:${e && e.error ? 'var(--red)' : 'var(--text3)'}" title="${e && e.error ? String(e.error).replace(/"/g, '&quot;') : ''}">${
+      e && e.error ? (String(e.error).slice(0, 80) + (String(e.error).length > 80 ? '…' : ''))
+      : e && e.t  ? 'No chart data available'
+                   : 'Loading price chart…'
+    }</div>`;
   }
   const isDaily = e.interval === 'day';
   // No aggregation on intraday — Zerodha-style density (raw 1-min bars).
@@ -2133,7 +2137,11 @@ function renderCardChart(el, sym) {
   const e = candleCache.get(sym);
   const raw = e && e.candles;
   if (!raw || !raw.length) {
-    chartEl.innerHTML = `<div class="text-[10px] w-full text-center self-center" style="color:var(--text3)">${e && e.t ? 'No chart data' : 'Loading…'}</div>`;
+    chartEl.innerHTML = `<div class="text-[10px] w-full text-center self-center" style="color:${e && e.error ? 'var(--red)' : 'var(--text3)'}" title="${e && e.error ? String(e.error).replace(/"/g, '&quot;') : ''}">${
+      e && e.error ? (String(e.error).slice(0, 60) + (String(e.error).length > 60 ? '…' : ''))
+      : e && e.t  ? 'No chart data'
+                   : 'Loading…'
+    }</div>`;
     if (metaEl) metaEl.textContent = '';
     return;
   }
@@ -2960,10 +2968,15 @@ function ensureCandles(sym) {
     .then(r => r.json())
     .then(data => {
       e.fetching = false;
+      // Always stamp e.t so the "Loading…" placeholder resolves even on error.
+      e.t = Date.now();
       if (data.type === 'candles') {
-        e.t = Date.now();
         e.candles = data.candles || [];
         e.interval = data.interval;
+        e.error = null;
+      } else {
+        e.candles = [];
+        e.error = data.message || 'Chart unavailable';
       }
       candleCache.set(sym, e);
       // Re-render whatever is currently showing this symbol's graph.
@@ -3004,7 +3017,11 @@ function renderStockGraph(sym, d) {
   const e = candleCache.get(sym);
   const raw = e && e.candles;
   if (!raw || !raw.length) {
-    return `<div class="py-12 text-center text-slate-600 text-xs">${e && e.t ? 'No chart data available' : 'Loading price chart…'}</div>`;
+    return `<div class="py-12 text-center text-xs" style="color:${e && e.error ? 'var(--red)' : 'var(--text3)'}" title="${e && e.error ? String(e.error).replace(/"/g, '&quot;') : ''}">${
+      e && e.error ? (String(e.error).slice(0, 80) + (String(e.error).length > 80 ? '…' : ''))
+      : e && e.t  ? 'No chart data available'
+                   : 'Loading price chart…'
+    }</div>`;
   }
 
   const isDaily = e.interval === 'day';
