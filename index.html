@@ -257,10 +257,26 @@
     .stock-card .cf-ohlc > span { display: flex; justify-content: space-between; align-items: baseline; }
     .stock-card .cf-ohlc .k { color: var(--text3); font-size: 10px; letter-spacing: .06em; margin-right: 6px; }
     .stock-card .cf-ohlc .v { font-weight: 700; letter-spacing: -.01em; }
-    /* Corner controls sit above the flipping inner. */
-    .stock-card > .card-btn { position: absolute; z-index: 3; }
+    /* Corner controls: real buttons with a visible outline + hover feedback,
+       not ghosted icons that blend into the card. */
+    .stock-card > .card-btn {
+      position: absolute; z-index: 3;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px;
+      border-radius: 6px;
+      background: rgba(148,148,168,.06);
+      border: 1px solid var(--border);
+      color: var(--text3);
+      font-size: 12px; line-height: 1;
+      cursor: pointer;
+      transition: background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;
+    }
+    .stock-card > .card-btn:hover { color: var(--text1); }
+    .stock-card > .card-btn:active { transform: translateY(1px); }
     .stock-card .flip-btn { top: 8px; right: 34px; }
+    .stock-card .flip-btn:hover  { color: var(--cyan); border-color: rgba(var(--accent-rgb),.45); background: rgba(var(--accent-rgb),.12); }
     .stock-card .close-btn { top: 8px; right: 8px; }
+    .stock-card .close-btn:hover { color: #ef4444; border-color: rgba(239,68,68,.45); background: rgba(239,68,68,.12); }
     .stock-card::after {
       content: '';
       position: absolute; top: 0; left: 12px; right: 12px; height: 2px;
@@ -2064,12 +2080,8 @@ function renderCards() {
       el.className = 'stock-card fade-in';
       el.onclick = () => selectSymbol(sym);
       el.innerHTML =
-        `<button data-role="flip" title="Flip to today's chart"` +
-          ` class="card-btn flip-btn text-[10px] transition w-5 h-5 flex items-center justify-center rounded-md hover:bg-white/5"` +
-          ` style="color:var(--text3)">&#8635;</button>` +
-        `<button data-role="close" title="Remove"` +
-          ` class="card-btn close-btn text-[10px] transition w-5 h-5 flex items-center justify-center rounded-md hover:bg-red-500/10"` +
-          ` style="color:var(--text3)">&#10005;</button>` +
+        `<button data-role="flip" title="Flip to today's chart" class="card-btn flip-btn">&#8635;</button>` +
+        `<button data-role="close" title="Remove" class="card-btn close-btn">&#10005;</button>` +
         `<div class="card-inner">` +
           `<div class="card-face card-front">` +
             `<div class="cf-topbar">` +
