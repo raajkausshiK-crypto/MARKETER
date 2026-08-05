@@ -182,6 +182,9 @@
     }
     .stock-card .card-back .cb-chart { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; }
     .stock-card .card-back .cb-chart svg { width: 100%; height: 100%; }
+    /* Smaller pill buttons on the flipped card so all 6 fit in the narrower row. */
+    .stock-card .cb-range { flex-wrap: wrap; }
+    .stock-card .cb-range .tf-btn { font-size: 10px; padding: 2px 6px; border-radius: 5px; }
     /* Modern header on the back face: LTP + pill-styled change badge + live dot. */
     .stock-card .cb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .stock-card .cb-title { display: flex; align-items: center; gap: 6px; }
@@ -2105,6 +2108,11 @@ function renderCards() {
               `</div>` +
               `<span id="cbMeta-${sym}" data-role="cbMeta"></span>` +
             `</div>` +
+            `<div class="cb-range flex items-center gap-1" role="tablist" aria-label="Chart timeframe">` +
+              CARD_STOCK_RANGES.map(r =>
+                `<button type="button" class="tf-btn${r.key === '1D' ? ' active' : ''}" data-key="${r.key}" onclick="setCardTf('${sym}','${r.key}')">${r.label}</button>`
+              ).join('') +
+            `</div>` +
             `<div data-role="cbChart" class="cb-chart"></div>` +
           `</div>` +
         `</div>`;
@@ -2173,6 +2181,59 @@ function updateCard(el, sym, d) {
     `</div>`;
 }
 
+// Per-card timeframe pills on the flipped back. Same shape as PREM_STRIKE_RANGES.
+const CARD_STOCK_RANGES = [
+  { key: '1D', label: '1D', interval: '1minute',  bars: null, agg: 5 },
+  { key: '1W', label: '1W', interval: '30minute', bars: 88,   agg: 1 },
+  { key: '1M', label: '1M', interval: 'day',      bars: 22,   agg: 1 },
+  { key: '3M', label: '3M', interval: 'day',      bars: 66,   agg: 1 },
+  { key: '6M', label: '6M', interval: 'day',      bars: 132,  agg: 1 },
+  { key: '1Y', label: '1Y', interval: 'day',      bars: 250,  agg: 1 },
+];
+const _cardTf = new Map();   // sym -> range key; missing = default '1D'
+function _cardTfFor(sym) {
+  const k = _cardTf.get(sym) || '1D';
+  return CARD_STOCK_RANGES.find(r => r.key === k) || CARD_STOCK_RANGES[0];
+}
+// Cache keyed on (sym, interval) so flipping between ranges never re-fetches.
+const stockRangeCache = new Map();
+function _stockRangeKey(sym, interval) { return `${sym}|${interval || 'auto'}`; }
+function ensureStockRange(sym, interval) {
+  const k = _stockRangeKey(sym, interval);
+  const e = stockRangeCache.get(k) || {};
+  const now = Date.now();
+  if (e.fetching) return e;
+  const ttl = interval === 'day' ? 600_000 : 60_000;
+  if (e.t && (now - e.t) < ttl) return e;
+  e.fetching = true;
+  stockRangeCache.set(k, e);
+  const iv = interval ? `&interval=${encodeURIComponent(interval)}` : '';
+  fetch(`${API_BASE}/api/chain?symbol=${encodeURIComponent(sym)}&candles=1${iv}`, { cache: 'no-store' })
+    .then(r => r.json())
+    .then(d => {
+      e.fetching = false;
+      e.t = Date.now();
+      if (d.type === 'candles') { e.candles = d.candles || []; e.interval = d.interval || interval; e.error = null; }
+      else                       { e.candles = []; e.error = d.message || 'Chart unavailable'; }
+      stockRangeCache.set(k, e);
+      // Refresh the flipped card if it's still on this range.
+      const el = document.querySelector(`#watchlistCards [data-sym="${sym}"].flipped`);
+      if (el && _cardTfFor(sym).interval === interval) renderCardChart(el, sym);
+    })
+    .catch(() => { e.fetching = false; stockRangeCache.set(k, e); });
+  return e;
+}
+
+function setCardTf(sym, key) {
+  _cardTf.set(sym, key);
+  const cur = _cardTfFor(sym);
+  const el = document.querySelector(`#watchlistCards [data-sym="${sym}"]`);
+  if (!el) return;
+  el.querySelectorAll('.cb-range .tf-btn').forEach(b => b.classList.toggle('active', b.dataset.key === cur.key));
+  ensureStockRange(sym, cur.interval);
+  renderCardChart(el, sym);
+}
+
 // Flip a watchlist card over to reveal today's intraday chart on the back.
 function toggleCardFlip(sym, ev) {
   if (ev) { ev.stopPropagation(); ev.preventDefault(); }
@@ -2181,8 +2242,9 @@ function toggleCardFlip(sym, ev) {
   const willFlip = !el.classList.contains('flipped');
   el.classList.toggle('flipped', willFlip);
   if (willFlip) {
-    ensureCandles(sym);           // fetches if we don't have it yet; callback re-renders
-    renderCardChart(el, sym);     // paint from cache immediately (Loading… if empty)
+    const cur = _cardTfFor(sym);
+    ensureStockRange(sym, cur.interval);   // fetch this range if needed
+    renderCardChart(el, sym);              // paint from cache immediately
   }
 }
 
@@ -2191,18 +2253,20 @@ function renderCardChart(el, sym) {
   const chartEl = el.querySelector('[data-role="cbChart"]');
   const metaEl  = el.querySelector('[data-role="cbMeta"]');
   if (!chartEl) return;
-  const e = candleCache.get(sym);
-  const raw = e && e.candles;
-  if (!raw || !raw.length) {
+  const cur = _cardTfFor(sym);
+  const e = stockRangeCache.get(_stockRangeKey(sym, cur.interval));
+  const rawAll = e && e.candles;
+  if (!rawAll || !rawAll.length) {
     chartEl.innerHTML = `<div class="text-[10px] w-full text-center self-center" style="color:${e && e.error ? 'var(--red)' : 'var(--text3)'}" title="${e && e.error ? String(e.error).replace(/"/g, '&quot;') : ''}">${
       e && e.error ? (String(e.error).slice(0, 60) + (String(e.error).length > 60 ? '…' : ''))
-      : e && e.t  ? 'No chart data'
-                   : 'Loading…'
+      : e && e.t  ? `No ${cur.label} data`
+                   : `Loading ${cur.label}…`
     }</div>`;
     if (metaEl) metaEl.textContent = '';
     return;
   }
-  const candles = raw;
+  const agg = cur.agg > 1 ? aggregateCandles(rawAll, cur.agg) : rawAll;
+  const candles = cur.bars ? agg.slice(-cur.bars) : agg;
   const n = candles.length;
   // Widen the right axis so 5-digit prices (e.g. "2,024.10") don't get clipped.
   const W = 280, H = 140, P = { t: 6, r: 44, b: 14, l: 4 };
@@ -2249,8 +2313,16 @@ function renderCardChart(el, sym) {
     `<text x="${(W - P.r + 3).toFixed(1)}" y="${(y(v) + 3).toFixed(1)}" fill="#5c5c6e" font-size="8" font-family="DM Mono, monospace">${fmt(v)}</text>`
   ).join('');
 
-  // First and last time labels along the bottom.
-  const tfmt = ts => new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  // Axis labels — dates for daily, times for intraday, both for the 30-min view.
+  const isDaily = cur.interval === 'day';
+  const is30m = cur.interval === '30minute';
+  const tfmt = ts => {
+    const d = new Date(ts);
+    if (isDaily) return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    if (is30m)   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                 + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
   const timeSVG =
     `<text x="${P.l}" y="${(H - 4).toFixed(1)}" fill="#5c5c6e" font-size="8" font-family="DM Mono, monospace">${tfmt(candles[0][0])}</text>` +
     `<text x="${(W - P.r).toFixed(1)}" y="${(H - 4).toFixed(1)}" fill="#5c5c6e" font-size="8" text-anchor="end" font-family="DM Mono, monospace">${tfmt(candles[n - 1][0])}</text>`;
@@ -2262,8 +2334,9 @@ function renderCardChart(el, sym) {
     `<circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.2" fill="${trendCol}"/>` +
     `<circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4.5" fill="${trendCol}" opacity="0.18"/>`;
 
-  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap, lo, hi, span, W, H, n, isDaily: false,
-                 hasVol: false, volBase: P.t + ih, tfmt: 'time' };
+  const tfmtKey = isDaily ? 'date' : (is30m ? 'datetime' : 'time');
+  const geom = { Pl: P.l, Pr: P.r, Pt: P.t, ih, gap, lo, hi, span, W, H, n, isDaily,
+                 hasVol: false, volBase: P.t + ih, tfmt: tfmtKey };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
   chartEl.innerHTML =
