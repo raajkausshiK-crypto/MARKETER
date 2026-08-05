@@ -215,7 +215,11 @@
     .stock-card .cb-chip.down { background: rgba(239,68,68,.14);  color: #ef4444; border: 1px solid rgba(239,68,68,.25); }
 
     /* Front-face modern layout. Same visual language as the back. */
-    .stock-card .cf-topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .stock-card .cf-topbar {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+      padding-right: 58px;   /* clear the two corner buttons (2 x 22 + 8 + 8) */
+    }
+    .stock-card .cf-topleft { display: inline-flex; align-items: center; gap: 6px; }
     .stock-card .cf-seg {
       font-family: var(--font-mono);
       font-size: 9px; font-weight: 700; letter-spacing: .12em;
@@ -2085,8 +2089,10 @@ function renderCards() {
         `<div class="card-inner">` +
           `<div class="card-face card-front">` +
             `<div class="cf-topbar">` +
-              `<span data-role="seg" class="cf-seg">F&amp;O</span>` +
-              `<span class="cb-live" title="Live"></span>` +
+              `<span class="cf-topleft">` +
+                `<span data-role="seg" class="cf-seg">F&amp;O</span>` +
+                `<span class="cb-live" title="Live"></span>` +
+              `</span>` +
             `</div>` +
             `<div class="cf-title"><span class="cf-name">${sym}</span></div>` +
             `<div data-role="body"></div>` +
