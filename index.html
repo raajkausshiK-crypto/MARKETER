@@ -1258,9 +1258,13 @@ function premStrikeSVG(sym, strike, side) {
                  hasVol: false, volBase: P.t + ih, tfmt };
   const chartData = encodeURIComponent(JSON.stringify({ g: geom, c: candles }));
 
-  // Multi-level x-axis time labels — 5 evenly-spaced, first & last anchored to edges.
-  const tickIdx = [0, Math.floor(n * 0.25), Math.floor(n * 0.5), Math.floor(n * 0.75), n - 1]
-    .filter((v, i, a) => a.indexOf(v) === i);
+  // Multi-level x-axis time labels. Long "dd MMM HH:mm" labels (1W view) need
+  // just 3 ticks or they collide; the shorter time/date-only labels take 5.
+  const _tickCount = tfmt === 'datetime' ? 3 : 5;
+  const _positions = _tickCount === 3
+    ? [0, Math.floor((n - 1) / 2), n - 1]
+    : [0, Math.floor(n * 0.25), Math.floor(n * 0.5), Math.floor(n * 0.75), n - 1];
+  const tickIdx = _positions.filter((v, i, a) => a.indexOf(v) === i);
   const timeTicks = tickIdx.map((i, idx) => {
     const xPos = P.l + (i + 0.5) * gap;
     const anchor = idx === 0 ? 'start' : (idx === tickIdx.length - 1 ? 'end' : 'middle');
