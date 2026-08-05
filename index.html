@@ -3686,15 +3686,17 @@ function chartCrosshair(ev) {
   ptext.setAttribute('y', (my + 3.3).toFixed(1));
   ptext.textContent = fmt(priceAt);
 
-  // OHLC tooltip for the hovered candle.
+  // OHLC tooltip for the hovered candle — Kite-style datetime.
+  //   intraday: "Fri, 04 Aug 2026, 13:36"
+  //   daily:    "Fri, 04 Aug 2026"
   const up = cand[4] >= cand[1];
   const col = up ? '#22c55e' : '#ef4444';
   const _d = new Date(cand[0]);
-  const _date = _d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  const _wd   = _d.toLocaleDateString('en-IN', { weekday: 'short' });
+  const _full = _d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const _time = _d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const dt = g.tfmt === 'datetime' ? `${_date} ${_time}`
-           : g.tfmt === 'date' || g.isDaily ? _date
-           : _time;
+  const _isDaily = g.tfmt === 'date' || g.isDaily;
+  const dt = _isDaily ? `${_wd}, ${_full}` : `${_wd}, ${_full}, ${_time}`;
   const chg = cand[1] ? ((cand[4] - cand[1]) / cand[1]) * 100 : 0;
   const vfmt = v => v >= 1e7 ? (v/1e7).toFixed(1)+'Cr' : v >= 1e5 ? (v/1e5).toFixed(1)+'L' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : String(Math.round(v));
   const rows = [
