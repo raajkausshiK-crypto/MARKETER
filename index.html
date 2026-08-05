@@ -1139,11 +1139,11 @@ function renderPremCharts() {
 // re-read the cache.
 //   bars: max trailing bars to render (null = whatever the API returned)
 //   agg:  frontend aggregation of 1-min bars (5 => 5-min candles for 1D)
-// Zerodha-style density: raw 1-minute bars for 1D (no client-side aggregation),
-// half-hours for 1W, daily for the rest. Bars-to-render is capped so the panel
-// doesn't try to draw a decade.
+// 5-min bars for 1D (raw 1-min looks broken for illiquid options with sparse
+// ticks — aggregating fills in the shape), half-hours for 1W, daily for the
+// rest. Bars-to-render is capped so the panel doesn't try to draw a decade.
 const PREM_STRIKE_RANGES = [
-  { key: '1D', label: '1D', interval: '1minute',  bars: null, agg: 1 },
+  { key: '1D', label: '1D', interval: '1minute',  bars: null, agg: 5 },
   { key: '1W', label: '1W', interval: '30minute', bars: 88,   agg: 1 },
   { key: '1M', label: '1M', interval: 'day',      bars: 22,   agg: 1 },
   { key: '3M', label: '3M', interval: 'day',      bars: 66,   agg: 1 },
